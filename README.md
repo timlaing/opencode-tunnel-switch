@@ -7,7 +7,8 @@ An OpenCode v2 plugin detects the reported `Error: Rate limit exceeded. Please t
 - [Configuration and API reference](docs/configuration.md)
 - [Deployment and systemd service](docs/deployment.md)
 - [Troubleshooting](docs/troubleshooting.md)
-- [Compatibility and verification](docs/compatibility.md)
+- [Compatibility](docs/compatibility.md)
+- [Verification](CONTRIBUTING.md#verification)
 - [Development, releases and contribution policy](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
@@ -103,9 +104,9 @@ private GitHub Packages; see its [package guide](plugin/README.md) for registry
 authentication. The bundle installation above needs GitHub repository access and
 public npm dependency access, but no GitHub Packages authentication.
 
-Development setup, tests, CI coverage, publishing and repository maintenance
-policies are documented in [CONTRIBUTING.md](CONTRIBUTING.md). See the
-[compatibility table](docs/compatibility.md) for verified runtimes.
+Development setup, [verification](CONTRIBUTING.md#verification), publishing and
+repository maintenance are documented in [CONTRIBUTING.md](CONTRIBUTING.md). See
+[compatibility](docs/compatibility.md) for runtime requirements.
 
 ## License
 

@@ -5,6 +5,9 @@ tags and npm publication describe the plugin unless explicitly stated otherwise.
 
 ## Unreleased
 
+- Verification commands, CI coverage and demonstrated runtime evidence centralized
+  in CONTRIBUTING.md; compatibility guide retains runtime requirements.
+
 - Detailed service/plugin configuration and API reference moved to docs/configuration.md;
   README retains a minimal local setup example.
 

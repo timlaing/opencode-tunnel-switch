@@ -13,10 +13,6 @@ in a virtual environment and a checkout separate from a running OpenCode instanc
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[test]' build
 npm ci --prefix plugin
-npm run check --prefix plugin
-npm test --prefix plugin
-.venv/bin/python -m pytest -q
-.venv/bin/python -m build
 ```
 
 For source development, clone the repository and run the commands above from its
@@ -26,6 +22,21 @@ tuple at the checkout's absolute `plugin` directory. OpenCode loads the root
 `plugin/index.ts`, which re-exports `src/index.ts`; there is no compilation step.
 A manifest export pointing only to nested source is insufficient for the local
 loader. Reload the plugin after source changes.
+
+Use the repository's configured no-reply email and GPG key for signed commits.
+Check `git log -1 --show-signature` before pushing. Do not commit live YAML,
+OpenCode config, `.npmrc`, registry tokens or generated package archives.
+
+## Verification
+
+After installing development dependencies, run:
+
+```sh
+npm run check --prefix plugin
+npm test --prefix plugin
+.venv/bin/python -m pytest -q
+.venv/bin/python -m build
+```
 
 Type checks and unit tests do not prove OpenCode discovery. Check `opencode plugin
 list`, the project-specific plugin API and `/tunnel-status` as described in the
@@ -56,11 +67,7 @@ The fixture's SSH configuration is test-only and must not be deployed.
 Explicit opt-in fails if Docker/tools are unavailable; ordinary runs skip these
 tests. Linux CI always enables them in the `Real SSH integration` job.
 
-Use the repository's configured no-reply email and GPG key for signed commits.
-Check `git log -1 --show-signature` before pushing. Do not commit live YAML,
-OpenCode config, `.npmrc`, registry tokens or generated package archives.
-
-## CI coverage
+### CI coverage
 
 CI runs plugin types/tests, Python service and HTTP/HTTPS proxy tests, real Bun
 routing on Python 3.12–3.14 on Linux and 3.13 on macOS, real OpenSSH Docker tests,
@@ -74,7 +81,26 @@ validation, authorization, serialized rotation, cooldowns, cancellation, connect
 identity and SOCKS readiness. Plugin tests cover endpoint/error matching, discovery,
 process-wide environment leases and direct REST requests.
 
-## Release bundle verification
+### Verified runtimes and limits
+
+| Component | Requirement or verified version | Evidence and limits |
+| --- | --- | --- |
+| Python | 3.12+; CI tests 3.12, 3.13 and 3.14 on Linux | Full service, HTTP/HTTPS and Bun integration tests; macOS CI tests Python 3.13 |
+| Node.js | CI uses 24 | Plugin type checks, tests and npm packaging; OpenCode loads the plugin through Bun |
+| Bun | CI pins 1.4.3 | Real plugin setup, proxy environment routing and direct REST calls |
+| OpenCode SDK | `@opencode/plugin` 2.0.29 | Pinned dependency; types and packed `Host.resolve`/`Host.load` checks |
+| OpenCode application | Local loading verified with v2.0.25 | Plugin listed as active and command registered; CI does not launch the complete application |
+| Linux | GitHub-hosted `ubuntu-latest` | Python/Bun integration tests; runner image changes over time |
+| macOS | GitHub-hosted `macos-14` | Python 3.13 and proxy/Bun integration tests |
+| OpenSSH | System `ssh` client with SOCKS forwarding | Linux CI runs real OpenSSH servers in disposable Docker fixtures, testing forwarding, rotation, host-key rejection, server loss and cleanup; deployment credentials still require target-host checks |
+| systemd | Linux service example supplied | Unit syntax is checked in CI; deployment with real SSH credentials must be verified on its target host |
+| Windows | No verification claimed | No Windows CI or native service example |
+
+Package metadata sets the Python minimum and SDK pin; workflow files specify CI runtimes. Inspect the latest successful [CI run](https://github.com/timlaing/opencode-tunnel-switch/actions/workflows/ci.yml)
+for evidence against the revision being deployed.
+
+
+### Release bundle verification
 
 With build, npm dependencies and Bun installed, generate the exact install bundle:
 
