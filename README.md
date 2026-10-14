@@ -2,6 +2,15 @@
 
 An OpenCode v2 plugin detects the reported `Error: Rate limit exceeded. Please try again later.` error for the `opencode` provider and calls a Python REST service to rotate an SSH SOCKS5 tunnel. The same Python process exposes an HTTP forward proxy and HTTPS CONNECT bridge through the SSH SOCKS5 listener. The plugin configures proxy environment variables for the whole OpenCode server process at startup. The service stops its current SSH process, advances through the YAML server list in order, waits for a successful SOCKS5 handshake, and returns the new connection ID and UTC start time.
 
+## Guides
+
+- [Deployment and systemd service](docs/deployment.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Compatibility and verification](docs/compatibility.md)
+- [Development, releases and contribution policy](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+
 ## Install and run
 
 Requires Python 3.12+, OpenSSH, Node/npm for plugin dependencies, and OpenCode v2. The plugin is checked against `@opencode/plugin` 2.0.29; v1 plugin APIs/configuration are different.

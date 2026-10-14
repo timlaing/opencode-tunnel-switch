@@ -15,7 +15,7 @@ concurrency:
 jobs:
   publish:
     name: Verify and publish private npm package
-    if: github.repository == 'timlaing/opencode-tunnel-switch' && (github.event_name == 'release' || github.ref == 'refs/heads/main')
+    if: github.repository == 'timlaing/opencode-tunnel-switch' && ((github.event_name == 'release' && !startsWith(github.event.release.tag_name, 'service-v')) || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
