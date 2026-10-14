@@ -203,3 +203,9 @@ API reference used: [OpenCode v2 plugins](https://opencode.ai/v2/docs/build/plug
 CI checks plugin types/tests and runs the Python, HTTP/HTTPS proxy and Bun integration tests on Python 3.12–3.14 on Linux, plus Python 3.13 on macOS. It builds a Python distribution and checks the installed CLI. These checks use local fixtures rather than real SSH credentials or provider accounts.
 
 Dependency audits run when dependency manifests change, weekly and on manual request. Dependabot proposes weekly updates for Python, npm and GitHub Actions dependencies. Issue forms request reproducible, sanitized reports; the PR template records validation and configuration compatibility.
+
+## Private npm package publishing
+
+The plugin is published as `@timlaing/opencode-tunnel-switch` in GitHub Packages. See the [package README](plugin/README.md) for registry authentication and the package-based OpenCode configuration. Local directory installation still works.
+
+The `Publish plugin` workflow runs on published GitHub releases and manual dispatches on `main`. Release tags must match the plugin version (`v0.1.0` or `plugin-v0.1.0` for the current version). It runs tests, installs and validates the packed TypeScript package, and publishes the exact tested archive using the workflow token. Package contents are limited to the root entrypoint, production source, manifest and package README; local configuration and tests are excluded. The package is linked to this private repository and its private visibility is checked after upload. New releases require a new npm package version.

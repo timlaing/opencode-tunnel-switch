@@ -1,0 +1,87 @@
+name: Publish plugin
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-packages-plugin-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify and publish private npm package
+    if: github.repository == 'timlaing/opencode-tunnel-switch' && (github.event_name == 'release' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+          registry-url: https://npm.pkg.github.com
+          scope: '@timlaing'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.4.3'
+      - name: Check package version and release tag
+        working-directory: plugin
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          if (pkg.name !== '@timlaing/opencode-tunnel-switch' || pkg.private === true || pkg.publishConfig.registry !== 'https://npm.pkg.github.com')
+            throw new Error('Unexpected package publishing configuration');
+          if (process.env.GITHUB_EVENT_NAME === 'release' && ![`v${pkg.version}`, `plugin-v${pkg.version}`].includes(process.env.RELEASE_TAG))
+            throw new Error('Release tag must match the plugin package version');
+          JS
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+      - run: npm ci --prefix plugin
+      - run: npm run check --prefix plugin
+      - run: npm test --prefix plugin
+      - run: python -m pip install -e '.[test]'
+      - name: Verify service and Bun integration
+        run: python -m pytest -q
+        env:
+          TUNNEL_SWITCH_TEST_BUN: bun
+      - name: Pack and verify the installed artifact
+        working-directory: plugin
+        run: |
+          npm pack --json > "$RUNNER_TEMP/plugin-pack.json"
+          bun scripts/verify-package.ts "$RUNNER_TEMP/plugin-pack.json"
+      - name: Require a private repository
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private')" = true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the tested archive
+        working-directory: plugin
+        run: |
+          archive=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.env.RUNNER_TEMP + "/plugin-pack.json", "utf8"))[0].filename)')
+          npm publish "$archive" --registry=https://npm.pkg.github.com --access=restricted
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify private package visibility
+        run: |
+          visibility=$(gh api "/users/$GITHUB_REPOSITORY_OWNER/packages?package_type=npm" --jq 'map(select(.name == "opencode-tunnel-switch" or .name == "@timlaing/opencode-tunnel-switch"))[0].visibility')
+          test "$visibility" = private
+          echo 'Published @timlaing/opencode-tunnel-switch as a private GitHub package.'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
