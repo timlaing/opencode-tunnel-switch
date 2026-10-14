@@ -197,3 +197,9 @@ Tests cover real HTTP forwarding, streamed/chunked uploads, HTTPS CONNECT with c
 An optional Bun integration test exercises the actual plugin setup, environment routing through the Python bridge, and direct REST calls. It runs when `bun` is on PATH or `TUNNEL_SWITCH_TEST_BUN` points to a Bun executable.
 
 API reference used: [OpenCode v2 plugins](https://opencode.ai/v2/docs/build/plugins/).
+
+## GitHub checks and contributions
+
+CI checks plugin types/tests and runs the Python, HTTP/HTTPS proxy and Bun integration tests on Python 3.12–3.14 on Linux, plus Python 3.13 on macOS. It builds a Python distribution and checks the installed CLI. These checks use local fixtures rather than real SSH credentials or provider accounts.
+
+Dependency audits run when dependency manifests change, weekly and on manual request. Dependabot proposes weekly updates for Python, npm and GitHub Actions dependencies. Issue forms request reproducible, sanitized reports; the PR template records validation and configuration compatibility.
