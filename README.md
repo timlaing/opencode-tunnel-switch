@@ -60,7 +60,7 @@ Merge `examples/opencode.jsonc` into your OpenCode configuration, replacing the 
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
     [
-      "/absolute/path/to/Free Switch OC Plugin/plugin",
+      "/absolute/path/to/opencode-tunnel-switch/plugin",
       {
         "apiIp": "127.0.0.1",
         "apiPort": 8765,
