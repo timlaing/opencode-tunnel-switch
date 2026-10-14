@@ -1,6 +1,6 @@
 {
   "name": "@timlaing/opencode-tunnel-switch",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "exports": "./index.ts",
   "scripts": {
@@ -32,5 +32,6 @@
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
     "access": "restricted"
-  }
+  },
+  "license": "MIT"
 }

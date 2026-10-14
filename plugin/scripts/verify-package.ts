@@ -13,10 +13,10 @@ if (entries.length !== 1 || entries[0].name !== "@timlaing/opencode-tunnel-switc
   throw new Error("Unexpected package identity");
 const pack = entries[0];
 const files = pack.files.map((file) => file.path);
-for (const required of ["package.json", "README.md", "index.ts", "src/index.ts", "src/client.ts", "src/discovery.ts", "src/environment.ts"])
+for (const required of ["LICENSE", "package.json", "README.md", "index.ts", "src/index.ts", "src/client.ts", "src/discovery.ts", "src/environment.ts"])
   if (!files.includes(required)) throw new Error(`Missing packaged file: ${required}`);
 for (const file of files)
-  if (!["package.json", "README.md", "index.ts"].includes(file) && !/^src\/[a-zA-Z0-9/_-]+\.ts$/.test(file))
+  if (!["LICENSE", "package.json", "README.md", "index.ts"].includes(file) && !/^src\/[a-zA-Z0-9/_-]+\.ts$/.test(file))
     throw new Error(`Unexpected packaged file: ${file}`);
 const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-packed-"));
 try {
