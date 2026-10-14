@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode/plugin";
-import { Options, detector, makeClient } from "./client.js";
+import { Options, RotationRateLimit, detector, makeClient } from "./client.js";
 import { configureProcessProxy } from "./environment.js";
 import { discoverProxy } from "./discovery.js";
 
@@ -9,6 +9,7 @@ export default Plugin.define({
     const options = Options.parse(ctx.options);
     const client = makeClient(options, options.apiToken);
     const matches = detector(options);
+    const rateLimitedSessions = new Set<string>();
     let restoreEnvironment = () => {};
     if (options.configureProxy) {
       let status: string;
@@ -21,14 +22,27 @@ export default Plugin.define({
     try {
       await ctx.session.hook("retry", async (event) => {
         // Only the first retry opportunity may rotate. OpenCode retains its hard retry limit.
-        if (event.attempt > 2 || !matches(event.model.providerID, event.error)) return;
+        if (event.attempt > 2) {
+          rateLimitedSessions.delete(event.sessionID);
+          return;
+        }
+        if (!matches(event.model.providerID, event.error)) return;
+        // A rate-limited switch only delays the work; do not attempt another switch in this retry sequence.
+        if (event.attempt === 1) rateLimitedSessions.delete(event.sessionID);
+        else if (rateLimitedSessions.delete(event.sessionID)) return;
         try {
           const status = await client.rotate();
           event.decision = { retry: true, delay: 1000 };
-          await ctx.session.synthetic({ sessionID: event.sessionID, text: `SSH tunnel rotated: ${status}` })
+          // Return the retry decision immediately so status rendering cannot hold up continuation.
+          void Promise.resolve().then(() => ctx.session.synthetic({ sessionID: event.sessionID, text: `SSH tunnel rotated: ${status}. Continuing the current work.` }))
             .catch((error) => console.error("[tunnel-switch] Could not display rotation status", String(error)));
         } catch (error) {
-          event.decision = { retry: false };
+          if (error instanceof RotationRateLimit) {
+            rateLimitedSessions.add(event.sessionID);
+            event.decision = { retry: true, delay: Math.ceil(error.retryAfterMs) };
+          } else {
+            event.decision = { retry: false };
+          }
           console.error(`[tunnel-switch] ${error instanceof Error ? error.message : String(error)}`);
         }
       });

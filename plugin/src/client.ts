@@ -19,6 +19,11 @@ export const Options = z.object({
 
 export type OptionsType = z.infer<typeof Options>;
 export type Failure = { type: string; message: string; status?: number };
+export class RotationRateLimit extends Error {
+  constructor(message: string, readonly retryAfterMs: number) {
+    super(message);
+  }
+}
 export function detector(options: OptionsType) {
   const patterns = options.patterns.map((pattern) => new RegExp(pattern, "i"));
   return (provider: string, error: Failure) => options.providers.includes(provider)
@@ -39,14 +44,25 @@ export function makeClient(options: OptionsType, token: string, fetcher: typeof 
       signal: AbortSignal.timeout(options.timeoutMs), redirect: "error",
     };
     const response = await fetcher(new URL(path, base), init);
-    if (!response.ok) throw new Error(`Tunnel API ${response.status}: ${await response.text()}`);
+    if (!response.ok) {
+      const message = `Tunnel API ${response.status}: ${await response.text()}`;
+      if (response.status === 429) {
+        const header = response.headers.get("Retry-After");
+        const seconds = header !== null && /^\d+(?:\.\d+)?$/.test(header.trim()) ? Number(header) : NaN;
+        const deadline = header === null ? NaN : Date.parse(header);
+        const delay = Number.isFinite(seconds) ? seconds * 1000 : deadline - Date.now();
+        throw new RotationRateLimit(message, Number.isFinite(delay) ? Math.max(1000, delay) : Math.max(1000, options.cooldownMs));
+      }
+      throw new Error(message);
+    }
     return await response.text();
   }
   return {
     status: () => call("status", "GET"),
     rotate: () => {
       if (pending) return pending;
-      if (Date.now() - lastRotation < options.cooldownMs) return Promise.reject(new Error("Tunnel rotation cooldown active"));
+      const remaining = options.cooldownMs - (Date.now() - lastRotation);
+      if (remaining > 0) return Promise.reject(new RotationRateLimit("Tunnel rotation cooldown active", remaining));
       lastRotation = Date.now();
       pending = call("rotate", "POST").finally(() => { pending = undefined; });
       return pending;
