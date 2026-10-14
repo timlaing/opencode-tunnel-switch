@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opencode-tunnel-switch"
+version = "0.1.0"
+description = "Serialized SSH SOCKS tunnel rotation service for OpenCode"
+requires-python = ">=3.12"
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "typer>=0.15,<1", "pydantic>=2.10,<3", "PyYAML>=6,<7", "ruamel.yaml>=0.18,<0.20", "httpx>=0.28,<1", "h11>=0.16,<1"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2"]
+
+[project.scripts]
+tunnel-switch = "tunnel_switch.cli:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tunnel_switch"]

@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+node_modules/
+dist/
+/config.yaml
+.env
+
+.DS_Store
+/opencode.json
+/opencode.jsonc

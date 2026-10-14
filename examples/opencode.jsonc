@@ -1,0 +1,26 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    [
+      "/absolute/path/to/Free Switch OC Plugin/plugin",
+      {
+        "apiIp": "127.0.0.1",
+        "apiPort": 8765,
+        "apiScheme": "http",
+        "apiToken": "paste-the-token-displayed-by-the-service",
+        "configureProxy": true,
+        "noProxy": [],
+        "providers": [
+          "opencode"
+        ],
+        "patterns": [
+          "FreeUsageLimitError",
+          "free usage exceeded",
+          "rate limit exceeded\\. please try again later"
+        ],
+        "timeoutMs": 25000,
+        "cooldownMs": 30000
+      }
+    ]
+  ]
+}
