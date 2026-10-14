@@ -4,6 +4,8 @@ OpenCode v2 plugin that discovers the Python service's HTTP proxy, configures pr
 
 The Python service must be running before plugin startup. See the repository [setup guide](https://github.com/timlaing/opencode-tunnel-switch#readme).
 
+After a successful tunnel switch, the plugin requests that OpenCode retry the current model request after one second, continuing the existing work automatically. Status display runs independently so a slow or failed notification cannot delay continuation. If a switch returns 429 (for example, another switch is already in progress), only the current work request is retried after `Retry-After`; the switch is not retried in that retry sequence. A local cooldown similarly delays the work request until it expires. Other switch failures stop the retry, and OpenCode's retry limit still applies.
+
 ## Install from private GitHub Packages
 
 Authenticate with a GitHub personal access token (classic) with `read:packages` and permission to this private package:

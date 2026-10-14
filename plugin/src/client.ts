@@ -19,6 +19,14 @@ export const Options = z.object({
 
 export type OptionsType = z.infer<typeof Options>;
 export type Failure = { type: string; message: string; status?: number };
+/** A rejected rotation whose timeout applies to retrying the current work request. */
+export class RotationRateLimit extends Error {
+  /** Carry the wait before retrying work, without requesting another rotation. */
+  constructor(message: string, readonly retryAfterMs: number) {
+    super(message);
+  }
+}
+/** Match configured exhaustion errors only for permitted providers and HTTP statuses. */
 export function detector(options: OptionsType) {
   const patterns = options.patterns.map((pattern) => new RegExp(pattern, "i"));
   return (provider: string, error: Failure) => options.providers.includes(provider)
@@ -26,11 +34,13 @@ export function detector(options: OptionsType) {
     && patterns.some((pattern) => pattern.test(`${error.type}: ${error.message}`));
 }
 
+/** Create an authenticated control client with shared rotation requests and cooldowns. */
 export function makeClient(options: OptionsType, token: string, fetcher: typeof fetch = fetch) {
   const host = options.apiIp.includes(":") ? `[${options.apiIp}]` : options.apiIp;
   const base = new URL(`${options.apiScheme}://${host}:${options.apiPort}/`);
   let pending: Promise<string> | undefined;
   let lastRotation = -Infinity;
+  /** Call the control API directly and expose 429 retry delays to the work retry hook. */
   async function call(path: string, method: string) {
     const init: RequestInit & { proxy: false } = {
       // Bun fetch must reach the control API even while the SSH tunnel is down.
@@ -39,14 +49,27 @@ export function makeClient(options: OptionsType, token: string, fetcher: typeof 
       signal: AbortSignal.timeout(options.timeoutMs), redirect: "error",
     };
     const response = await fetcher(new URL(path, base), init);
-    if (!response.ok) throw new Error(`Tunnel API ${response.status}: ${await response.text()}`);
+    if (!response.ok) {
+      const message = `Tunnel API ${response.status}: ${await response.text()}`;
+      if (response.status === 429) {
+        const header = response.headers.get("Retry-After");
+        const seconds = header !== null && /^\d+(?:\.\d+)?$/.test(header.trim()) ? Number(header) : NaN;
+        const deadline = header === null ? NaN : Date.parse(header);
+        const delay = Number.isFinite(seconds) ? seconds * 1000 : deadline - Date.now();
+        throw new RotationRateLimit(message, Number.isFinite(delay) ? Math.max(1000, delay) : Math.max(1000, options.cooldownMs));
+      }
+      throw new Error(message);
+    }
     return await response.text();
   }
   return {
+    /** Read tunnel status without rotating or using the tunnel proxy. */
     status: () => call("status", "GET"),
+    /** Attempt one rotation, sharing in-flight calls and reporting remaining cooldowns. */
     rotate: () => {
       if (pending) return pending;
-      if (Date.now() - lastRotation < options.cooldownMs) return Promise.reject(new Error("Tunnel rotation cooldown active"));
+      const remaining = options.cooldownMs - (Date.now() - lastRotation);
+      if (remaining > 0) return Promise.reject(new RotationRateLimit("Tunnel rotation cooldown active", remaining));
       lastRotation = Date.now();
       pending = call("rotate", "POST").finally(() => { pending = undefined; });
       return pending;

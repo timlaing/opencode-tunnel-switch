@@ -105,3 +105,70 @@ test("configureProxy false skips startup discovery", async () => {
     assert.deepEqual({ ...process.env }, originalEnv);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+for (const display of ["pending", "throws"] as const) {
+  test(`successful switch permits continuation when status display ${display}`, async () => {
+    const originalFetch = globalThis.fetch;
+    let hook!: (event: SessionRetry) => Promise<void>;
+    let finishDisplay!: () => void;
+    const pendingDisplay = new Promise<void>((resolve) => { finishDisplay = resolve; });
+    const messages: string[] = [];
+    globalThis.fetch = async () => new Response('{"state":"connected"}');
+    const ctx = {
+      options: { apiToken: "test-token", configureProxy: false },
+      session: {
+        hook: async (_name: string, callback: typeof hook) => { hook = callback; },
+        synthetic: ({ text }: { text: string }) => {
+          messages.push(text);
+          if (display === "throws") throw new Error("display unavailable");
+          return pendingDisplay;
+        },
+      },
+      command: { transform: async () => {} },
+    } as unknown as Parameters<typeof plugin.setup>[0];
+    try {
+      await plugin.setup(ctx);
+      const event = {
+        sessionID: "ongoing-work", agent: "build", model: { providerID: "opencode", id: "free" },
+        error: { type: "provider.rate-limit", message: "Free usage exceeded", status: 429 },
+        attempt: 1, decision: { retry: false },
+      } as SessionRetry;
+      // The host awaits the hook before retrying the current model request.
+      await hook(event);
+      assert.deepEqual(event.decision, { retry: true, delay: 1000 });
+      assert.match(messages[0], /Continuing the current work/);
+    } finally {
+      finishDisplay();
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
+
+test("rate-limited switch retries only the work after Retry-After", async () => {
+  const originalFetch = globalThis.fetch;
+  let hook!: (event: SessionRetry) => Promise<void>;
+  let switches = 0;
+  globalThis.fetch = async () => {
+    switches++;
+    return new Response("Switch already in progress", { status: 429, headers: { "Retry-After": "7" } });
+  };
+  const ctx = {
+    options: { apiToken: "secret", configureProxy: false },
+    session: { hook: async (_name: string, callback: typeof hook) => { hook = callback; } },
+    command: { transform: async () => {} },
+  } as unknown as Parameters<typeof plugin.setup>[0];
+  try {
+    await plugin.setup(ctx);
+    const event = {
+      sessionID: "work", agent: "build", model: { providerID: "opencode", id: "free" },
+      error: { type: "provider.rate-limit", message: "Free usage exceeded", status: 429 },
+      attempt: 1, decision: { retry: false },
+    } as SessionRetry;
+    await hook(event);
+    assert.deepEqual(event.decision, { retry: true, delay: 7000 });
+    const next = { ...event, attempt: 2, decision: { retry: false } } as SessionRetry;
+    await hook(next);
+    assert.equal(switches, 1);
+    assert.deepEqual(next.decision, { retry: false });
+  } finally { globalThis.fetch = originalFetch; }
+});
