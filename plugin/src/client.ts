@@ -20,6 +20,7 @@ export const Options = z.object({
 export type OptionsType = z.infer<typeof Options>;
 export type Failure = { type: string; message: string; status?: number };
 export class RotationRateLimit extends Error {
+  /** Carry the wait before retrying work, without requesting another rotation. */
   constructor(message: string, readonly retryAfterMs: number) {
     super(message);
   }
@@ -31,11 +32,13 @@ export function detector(options: OptionsType) {
     && patterns.some((pattern) => pattern.test(`${error.type}: ${error.message}`));
 }
 
+/** Create an authenticated control client with shared rotation requests and cooldowns. */
 export function makeClient(options: OptionsType, token: string, fetcher: typeof fetch = fetch) {
   const host = options.apiIp.includes(":") ? `[${options.apiIp}]` : options.apiIp;
   const base = new URL(`${options.apiScheme}://${host}:${options.apiPort}/`);
   let pending: Promise<string> | undefined;
   let lastRotation = -Infinity;
+  /** Call the control API directly and expose 429 retry delays to the work retry hook. */
   async function call(path: string, method: string) {
     const init: RequestInit & { proxy: false } = {
       // Bun fetch must reach the control API even while the SSH tunnel is down.
@@ -59,6 +62,7 @@ export function makeClient(options: OptionsType, token: string, fetcher: typeof 
   }
   return {
     status: () => call("status", "GET"),
+    /** Attempt one rotation, sharing in-flight calls and reporting remaining cooldowns. */
     rotate: () => {
       if (pending) return pending;
       const remaining = options.cooldownMs - (Date.now() - lastRotation);
