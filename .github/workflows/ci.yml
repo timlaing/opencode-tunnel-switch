@@ -85,3 +85,19 @@ jobs:
           python -m pip install --force-reinstall --no-deps dist/*.whl
           tunnel-switch --help
           tunnel-switch validate --config examples/config.yaml
+
+  deployment:
+    name: Deployment unit syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify systemd unit without starting a service
+        run: |
+          # The CLI is installed at deployment time; this executable placeholder
+          # lets verify check the unit's syntax and dependencies without running it.
+          sudo mkdir -p /opt/tunnel-switch/.venv/bin
+          sudo ln -s /usr/bin/true /opt/tunnel-switch/.venv/bin/tunnel-switch
+          systemd-analyze verify --man=no deploy/systemd/tunnel-switch.service

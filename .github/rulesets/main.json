@@ -60,6 +60,10 @@
           {
             "context": "Python 3.13 / macos-14",
             "integration_id": 15368
+          },
+          {
+            "context": "Deployment unit syntax",
+            "integration_id": 15368
           }
         ]
       }
