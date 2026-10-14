@@ -1,5 +1,7 @@
 # Deploying the Python service
 
+See the [configuration guide](configuration.md) for YAML fields, plugin options and API behavior.
+
 The supplied [systemd unit](../deploy/systemd/tunnel-switch.service) targets
 Linux with systemd, Python 3.12 or newer, and OpenSSH. macOS users can run the
 foreground CLI described in the README; no launchd service is supplied.

@@ -5,6 +5,9 @@ tags and npm publication describe the plugin unless explicitly stated otherwise.
 
 ## Unreleased
 
+- Detailed service/plugin configuration and API reference moved to docs/configuration.md;
+  README retains a minimal local setup example.
+
 - Release-bundle installation, with development instructions in CONTRIBUTING.md.
 - GitHub release asset packaging and fresh-wheel installation verification.
 
