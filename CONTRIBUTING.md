@@ -109,8 +109,9 @@ With build, npm dependencies and Bun installed, generate the exact install bundl
 
 The script builds Python wheel/sdist, verifies the installed packed plugin and
 assembles only distribution files plus example configuration and guides. The
-release workflow checks the checksum and installs the wheel into a fresh virtual
-environment. Never substitute live YAML or OpenCode configuration for examples.
+release workflow checks the checksum, verifies the bundled plugin lockfile matches
+the source, installs its locked production dependencies with `npm ci`, and installs
+the wheel into a fresh virtual environment. Never substitute live YAML or OpenCode configuration for examples.
 
 ## Releases
 

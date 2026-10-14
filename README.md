@@ -36,7 +36,7 @@ tar -xzf opencode-tunnel-switch-release.tar.gz
 cd opencode-tunnel-switch
 python3 -m venv .venv
 .venv/bin/python -m pip install service/*.whl
-npm install --prefix plugin --omit=dev --ignore-scripts
+npm ci --prefix plugin --omit=dev --ignore-scripts
 cp examples/config.yaml config.yaml
 chmod 600 config.yaml
 ```

@@ -32,6 +32,7 @@ with tempfile.TemporaryDirectory(prefix="tunnel-switch-release-") as work:
         bundle.extractall(stage / "unpacked", filter="data")
     (stage / "unpacked/package").rename(stage / "plugin")
     (stage / "unpacked").rmdir()
+    shutil.copyfile(ROOT / "plugin/package-lock.json", stage / "plugin/package-lock.json")
     for name in ("README.md", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "LICENSE"):
         shutil.copyfile(ROOT / name, stage / name)
     shutil.copytree(ROOT / "docs", stage / "docs")
