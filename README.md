@@ -200,6 +200,8 @@ API reference used: [OpenCode v2 plugins](https://opencode.ai/v2/docs/build/plug
 
 ## GitHub checks and contributions
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for labeling, inactive-item handling, and the intended main-branch protection rules.
+
 CI checks plugin types/tests and runs the Python, HTTP/HTTPS proxy and Bun integration tests on Python 3.12–3.14 on Linux, plus Python 3.13 on macOS. It builds a Python distribution and checks the installed CLI. These checks use local fixtures rather than real SSH credentials or provider accounts.
 
 Dependency audits run when dependency manifests change, weekly and on manual request. Dependabot proposes weekly updates for Python, npm and GitHub Actions dependencies. Issue forms request reproducible, sanitized reports; the PR template records validation and configuration compatibility.

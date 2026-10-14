@@ -1,0 +1,24 @@
+"area: plugin":
+  - changed-files:
+      - any-glob-to-any-file: ['plugin/index.ts', 'plugin/src/**', 'plugin/package*.json', 'plugin/tsconfig.json']
+"area: api":
+  - changed-files:
+      - any-glob-to-any-file: ['src/tunnel_switch/api.py', 'src/tunnel_switch/cli.py', 'src/tunnel_switch/config.py', 'examples/**']
+"area: ssh":
+  - changed-files:
+      - any-glob-to-any-file: ['src/tunnel_switch/tunnel.py']
+"area: proxy":
+  - changed-files:
+      - any-glob-to-any-file: ['src/tunnel_switch/http_proxy.py']
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ['**/*.md', 'LICENSE', 'plugin/LICENSE']
+tests:
+  - changed-files:
+      - any-glob-to-any-file: ['tests/**', 'plugin/test/**']
+ci:
+  - changed-files:
+      - any-glob-to-any-file: ['.github/**', 'plugin/scripts/**']
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file: ['pyproject.toml', 'plugin/package.json', 'plugin/package-lock.json', '.github/dependabot.yml']

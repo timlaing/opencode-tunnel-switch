@@ -1,8 +1,20 @@
 name: Feature request
 description: Suggest a change to the plugin, service or configuration.
 title: '[Feature]: '
-labels: [enhancement]
+labels: [enhancement, needs-triage]
 body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - OpenCode plugin loading or commands
+        - Rate-limit detection or retry
+        - REST API or token configuration
+        - SSH connection or rotation
+        - HTTP proxy or HTTPS CONNECT
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:
