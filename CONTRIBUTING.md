@@ -38,10 +38,9 @@ npm test --prefix plugin
 .venv/bin/python -m build
 ```
 
-Type checks and unit tests do not prove OpenCode discovery. Check `opencode plugin
-list`, the project-specific plugin API and `/tunnel-status` as described in the
-[troubleshooting guide](docs/troubleshooting.md). Use an isolated checkout for
-`npm ci` when another OpenCode process is using this plugin's dependencies.
+For plugin discovery failures, connection problems and diagnostic commands, use
+the [troubleshooting guide](docs/troubleshooting.md). Keep verification procedures
+in this guide and operational diagnosis in that document.
 
 Install Bun to run the real integration test, or set `TUNNEL_SWITCH_TEST_BUN` to
 its executable. Without it, that integration test is skipped. Local proxy tests
