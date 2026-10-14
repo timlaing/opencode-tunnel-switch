@@ -25,7 +25,7 @@ Keep registry credentials in your npm user configuration, not the repository. Co
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
     [
-      "@timlaing/opencode-tunnel-switch@0.1.0",
+      "@timlaing/opencode-tunnel-switch@0.1.1",
       {
         "apiIp": "127.0.0.1",
         "apiPort": 8765,
@@ -44,4 +44,4 @@ The repository's `Publish plugin` workflow tests the plugin and Python/Bun integ
 
 Publishing runs when a GitHub release is published, or manually on `main`. A release tag must be `v<package-version>` or `plugin-v<package-version>`, matching `package.json`. Update the manifest and lockfile version before releasing a new version. Published versions cannot be overwritten.
 
-Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no publishing PAT or repository secret is required. The package is linked to the private repository, and the workflow checks package visibility after publishing. The `private: true` npm flag is omitted because it would prohibit all publication, including private GitHub Packages.
+Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no publishing PAT or repository secret is required. The package is linked to the private repository, and publishing uses restricted access after checking that the repository is private. The workflow reads the published version back from the npm registry and verifies its archive integrity and repository link. The `private: true` npm flag is omitted because it would prohibit all publication, including private GitHub Packages.

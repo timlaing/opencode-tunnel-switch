@@ -36,3 +36,24 @@ console.log(JSON.stringify(process.env.TEST_NPM_SCENARIO === 'same' ? 'sha512-te
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 }
+
+const verifyScript = fileURLToPath(new URL("../scripts/verify-published-package.mjs", import.meta.url));
+for (const scenario of ["valid", "wrong-integrity", "wrong-repository", "wrong-version"] as const) {
+  test(`registry readback rejects invalid metadata: ${scenario}`, () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-readback-test-"));
+    const manifest = path.join(directory, "pack.json");
+    writeFileSync(manifest, JSON.stringify([{ name: "@timlaing/opencode-tunnel-switch", version: "0.1.1", integrity: "sha512-tested" }]));
+    const published = {
+      name: "@timlaing/opencode-tunnel-switch",
+      version: scenario === "wrong-version" ? "9.9.9" : "0.1.1",
+      dist: { integrity: scenario === "wrong-integrity" ? "sha512-other" : "sha512-tested" },
+      repository: { url: scenario === "wrong-repository" ? "git+https://github.com/example/other.git" : "git+https://github.com/timlaing/opencode-tunnel-switch.git" },
+    };
+    writeFileSync(path.join(directory, "npm"), `#!/usr/bin/env node\nconsole.log(${JSON.stringify(JSON.stringify(published))});\n`, { mode: 0o755 });
+    try {
+      const result = spawnSync(process.execPath, [verifyScript, manifest], { encoding: "utf8", env: { ...process.env, PATH: `${directory}${path.delimiter}${process.env.PATH}` } });
+      if (scenario === "valid") assert.equal(result.status, 0, result.stderr);
+      else assert.notEqual(result.status, 0);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+}

@@ -76,28 +76,8 @@ jobs:
         run: node scripts/publish-package.mjs "$RUNNER_TEMP/plugin-pack.json"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify private package visibility
-        run: |
-          for attempt in 1 2 3 4 5 6; do
-            echo "Package metadata check $attempt"
-            gh api --paginate --slurp "/users/$GITHUB_REPOSITORY_OWNER/packages?package_type=npm&per_page=100" > "$RUNNER_TEMP/packages.json"
-            if node --input-type=module <<'JS'
-          import fs from 'node:fs';
-          const packages = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/packages.json', 'utf8')).flat();
-          const pkg = packages.find(p => ['opencode-tunnel-switch', '@timlaing/opencode-tunnel-switch'].includes(p.name));
-          if (!pkg) {
-            console.error('Published package not yet visible in metadata; waiting for registry indexing.');
-            process.exit(1);
-          }
-          console.log(JSON.stringify({ name: pkg.name, visibility: pkg.visibility, url: pkg.html_url, repository: pkg.repository?.full_name }));
-          if (pkg.visibility !== 'private') throw new Error('Published package is not private');
-          JS
-            then
-              exit 0
-            fi
-            sleep 5
-          done
-          echo 'Could not verify package privacy after registry indexing retries.' >&2
-          exit 1
+      - name: Verify the published package
+        working-directory: plugin
+        run: node scripts/verify-published-package.mjs "$RUNNER_TEMP/plugin-pack.json"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
