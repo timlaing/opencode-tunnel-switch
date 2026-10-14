@@ -5,6 +5,7 @@ import { discoverProxy } from "./discovery.js";
 
 export default Plugin.define({
   id: "tunnel-switch",
+  /** Discover the proxy, register bounded work retries and status commands, and return environment cleanup. */
   async setup(ctx) {
     const options = Options.parse(ctx.options);
     const client = makeClient(options, options.apiToken);
