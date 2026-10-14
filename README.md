@@ -13,18 +13,38 @@ An OpenCode v2 plugin detects the reported `Error: Rate limit exceeded. Please t
 
 ## Install and run
 
-Requires Python 3.12+, OpenSSH, Node/npm for plugin dependencies, and OpenCode v2. The plugin is checked against `@opencode/plugin` 2.0.29; v1 plugin APIs/configuration are different.
+Requires Python 3.12+, OpenSSH, Node/npm for the plugin's runtime dependencies,
+and OpenCode v2. Source development and tests are documented in
+[CONTRIBUTING.md](CONTRIBUTING.md#development).
 
-From this directory:
+Download the install bundle from a [GitHub release](https://github.com/timlaing/opencode-tunnel-switch/releases).
+This repository is private, so authenticate with GitHub CLI using an account with
+repository access. Releases must have both assets below before installing.
+There are no published GitHub releases yet; the release workflow will provide
+these assets when the first release is published.
 
 ```sh
-uv venv --python python3.13
-uv pip install --python .venv/bin/python -e '.[test]'
-cd plugin
-npm ci
-cd ..
+gh auth login
+gh release download --repo timlaing/opencode-tunnel-switch \
+  --pattern opencode-tunnel-switch-release.tar.gz --pattern SHA256SUMS
+# Linux:
+sha256sum -c SHA256SUMS
+# On macOS use: shasum -a 256 -c SHA256SUMS
+tar -xzf opencode-tunnel-switch-release.tar.gz
+cd opencode-tunnel-switch
+python3 -m venv .venv
+.venv/bin/python -m pip install service/*.whl
+npm install --prefix plugin --omit=dev --ignore-scripts
 cp examples/config.yaml config.yaml
+chmod 600 config.yaml
 ```
+
+The bundle includes the Python wheel/sdist, the plugin's production files,
+example configuration, documentation, a systemd unit, and `versions.json`.
+No source checkout, editable Python install, test dependencies or plugin build
+is required. Checksums detect a damaged download; trust the release and its
+publisher as well. To select a specific release, put its tag immediately after
+`gh release download`.
 
 Edit `config.yaml` with your SSH host aliases and the SOCKS, HTTP proxy and API bind IP/port. Only `host` is required for each SSH server. `name` defaults to `host`; `user`, `port` and `identity_file` are optional overrides. When omitted (or null), the SSH command leaves them unset, so the system SSH client inherits settings from `~/.ssh/config` for the account running the service. Without configured SSH values, OpenSSH uses its own defaults. Identity paths relative to the YAML file resolve from its directory; `~` expands. YAML is mandatory for every CLI command. Unknown fields, invalid IPs/ports, duplicate server names and missing identity files are rejected.
 
@@ -53,7 +73,7 @@ Run exactly one service process for a given SOCKS socket. The supplied CLI uses 
 
 ## OpenCode configuration
 
-Merge `examples/opencode.jsonc` into your OpenCode configuration, replacing the plugin package path with this checkout's absolute `plugin` directory. The REST target is explicitly configurable:
+Merge the bundle's `examples/opencode.jsonc` into your OpenCode configuration, replacing the plugin package path with the extracted bundle's absolute `plugin` directory. The REST target is explicitly configurable:
 
 ```json
 {
@@ -166,7 +186,8 @@ Example connected status:
 
 ## Debug plugin loading
 
-There is no separate build step: OpenCode loads the TypeScript plugin through the root `plugin/index.ts`, which re-exports the implementation in `src/index.ts`. The local-directory loader needs a root `index`/`server` entrypoint; a manifest export pointing only to a nested source file is insufficient. Configure the absolute `plugin` directory using the singular `plugin` key and `[path, options]` tuple above.
+OpenCode loads the installed plugin's root `plugin/index.ts`. Configure its absolute
+`plugin` directory using the singular `plugin` key and `[path, options]` tuple above.
 
 Run OpenCode from the same project directory as the affected session:
 
@@ -190,36 +211,19 @@ For the existing server's loader errors on macOS:
 rg 'tunnel-switch|failed to load plugin' ~/.local/share/opencode/log/opencode.log
 ```
 
-Keep tokens and unrelated credentials out of shared diagnostic output. `npm run check` and `npm test` verify source types/behavior; they do not by themselves prove OpenCode can discover the local package.
+Keep tokens and unrelated credentials out of shared diagnostic output. For development checks and local package-loading details, see [CONTRIBUTING.md](CONTRIBUTING.md#development).
 
-## Verification
+## Release and development information
 
-```sh
-.venv/bin/pytest -q
-cd plugin
-npm run check
-npm test
-```
+Release bundles are built and checked by `Release install bundle`, then attached
+to a published GitHub release. The plugin is also available separately through
+private GitHub Packages; see its [package guide](plugin/README.md) for registry
+authentication. The bundle installation above needs GitHub repository access and
+public npm dependency access, but no GitHub Packages authentication.
 
-Tests cover real HTTP forwarding, streamed/chunked uploads, HTTPS CONNECT with certificate validation, half-closes, proxy failure responses, header validation, connection limits/shutdown, process-wide environment setup/restoration, direct REST calls, configuration/CLI validation, authorization, serialized rotation, cooldown on failures, cancellation, connection identity and status, SOCKS readiness, and plugin endpoint/error matching. Local socket tests need permission to bind loopback ports. SSH behavior is covered by subprocess unit fixtures and an opt-in real OpenSSH Docker suite, enabled in Linux CI. See [CONTRIBUTING.md](CONTRIBUTING.md#development) for the local command. Real deployment credentials and an installed OpenCode runtime are still required for target-host verification.
-
-An optional Bun integration test exercises the actual plugin setup, environment routing through the Python bridge, and direct REST calls. It runs when `bun` is on PATH or `TUNNEL_SWITCH_TEST_BUN` points to a Bun executable.
-
-API reference used: [OpenCode v2 plugins](https://opencode.ai/v2/docs/build/plugins/).
-
-## GitHub checks and contributions
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for labeling, inactive-item handling, and the intended main-branch protection rules.
-
-CI verifies systemd unit syntax and real OpenSSH Docker integration, checks plugin types/tests, and runs the Python, HTTP/HTTPS proxy and Bun integration tests on Python 3.12–3.14 on Linux, plus Python 3.13 on macOS. It builds a Python distribution and checks the installed CLI. These checks use local fixtures rather than real SSH credentials or provider accounts.
-
-Dependency audits run when dependency manifests change, weekly and on manual request. Dependabot proposes weekly updates for Python, npm and GitHub Actions dependencies. Issue forms request reproducible, sanitized reports; the PR template records validation and configuration compatibility.
-
-## Private npm package publishing
-
-The plugin is published as `@timlaing/opencode-tunnel-switch` in GitHub Packages. See the [package README](plugin/README.md) for registry authentication and the package-based OpenCode configuration. Local directory installation still works.
-
-The `Publish plugin` workflow runs on published GitHub releases and manual dispatches on `main`. Release tags must match the plugin version (`v0.1.2` or `plugin-v0.1.2` for the current version). It runs tests, installs and validates the packed TypeScript package, and publishes the exact tested archive using the workflow token. Package contents are limited to the root entrypoint, production source, manifest and package README; local configuration and tests are excluded. The workflow requires a private repository, publishes with restricted access, and reads back the published version to verify its archive integrity and repository link. GitHub Packages creates new packages privately by default. New releases require a new npm package version. Re-running publication of an existing version succeeds only when its registry integrity matches the exact tested archive.
+Development setup, tests, CI coverage, publishing and repository maintenance
+policies are documented in [CONTRIBUTING.md](CONTRIBUTING.md). See the
+[compatibility table](docs/compatibility.md) for verified runtimes.
 
 ## License
 

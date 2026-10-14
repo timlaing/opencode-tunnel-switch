@@ -7,9 +7,10 @@ These instructions install files on a deployment host, not on your workstation.
 
 ## Install
 
-Check out an approved repository revision at `/opt/tunnel-switch`. Authenticate
-to the private repository using your existing GitHub access; keep GitHub tokens
-out of clone URLs. Code and its virtual environment should be root-owned and
+Download and verify an approved GitHub release bundle using the
+[release installation steps](../README.md#install-and-run), then place its extracted
+`opencode-tunnel-switch` directory at `/opt/tunnel-switch`. Authenticate using
+your existing private-repository access; keep GitHub tokens out of download URLs. Code and its virtual environment should be root-owned and
 not writable by the service account. On Debian/Ubuntu, install `openssh-client`
 and the `python3-venv` package matching a supported Python version first.
 
@@ -19,7 +20,7 @@ sudo useradd --system --user-group --create-home \
 sudo install -d -m 0700 -o tunnel-switch -g tunnel-switch /etc/tunnel-switch
 sudo install -d -m 0700 -o tunnel-switch -g tunnel-switch /var/lib/tunnel-switch/.ssh
 sudo python3 -m venv /opt/tunnel-switch/.venv
-sudo /opt/tunnel-switch/.venv/bin/python -m pip install /opt/tunnel-switch
+sudo /opt/tunnel-switch/.venv/bin/python -m pip install /opt/tunnel-switch/service/*.whl
 sudo install -m 0600 -o tunnel-switch -g tunnel-switch \
   /opt/tunnel-switch/examples/config.yaml /etc/tunnel-switch/config.yaml
 sudoedit /etc/tunnel-switch/config.yaml
@@ -116,10 +117,10 @@ and adjust any `Include`, `IdentityFile` or `ProxyJump` dependencies accordingly
 Its filesystem restrictions follow [systemd's execution settings](https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml).
 
 Before upgrading, preserve a protected copy of the configuration and current
-revision outside the checkout. Stop the service, install the approved new
-revision into the existing virtual environment, validate YAML as the service
-account, then start it and verify status. Restore the previous revision and
-configuration if validation fails. Changing YAML requires a service restart;
+release bundle. Stop the service, extract the approved new release and install
+its wheel into the existing virtual environment, validate YAML as the service
+account, then start it and verify status. Restore the previous bundle and wheel
+and configuration if validation fails. Changing YAML requires a service restart;
 changing discovered HTTP proxy settings also requires an OpenCode plugin reload.
 
 The unit restarts a failed Python process. An SSH subprocess exiting while the

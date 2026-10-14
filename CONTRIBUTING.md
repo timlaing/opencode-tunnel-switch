@@ -2,7 +2,7 @@
 
 Use a feature branch and open a pull request into `main`. Keep changes focused,
 include relevant validation in the PR template, and keep credentials out of
-issues, logs and examples. See the [README](README.md#verification) for checks.
+issues, logs and examples. Development setup and required checks are below.
 
 ## Development
 
@@ -18,6 +18,19 @@ npm test --prefix plugin
 .venv/bin/python -m pytest -q
 .venv/bin/python -m build
 ```
+
+For source development, clone the repository and run the commands above from its
+root. Copy `examples/config.yaml` to ignored `config.yaml`, then configure it and
+run `.venv/bin/tunnel-switch serve --config config.yaml`. Point OpenCode's plugin
+tuple at the checkout's absolute `plugin` directory. OpenCode loads the root
+`plugin/index.ts`, which re-exports `src/index.ts`; there is no compilation step.
+A manifest export pointing only to nested source is insufficient for the local
+loader. Reload the plugin after source changes.
+
+Type checks and unit tests do not prove OpenCode discovery. Check `opencode plugin
+list`, the project-specific plugin API and `/tunnel-status` as described in the
+[troubleshooting guide](docs/troubleshooting.md). Use an isolated checkout for
+`npm ci` when another OpenCode process is using this plugin's dependencies.
 
 Install Bun to run the real integration test, or set `TUNNEL_SWITCH_TEST_BUN` to
 its executable. Without it, that integration test is skipped. Local proxy tests
@@ -47,6 +60,33 @@ Use the repository's configured no-reply email and GPG key for signed commits.
 Check `git log -1 --show-signature` before pushing. Do not commit live YAML,
 OpenCode config, `.npmrc`, registry tokens or generated package archives.
 
+## CI coverage
+
+CI runs plugin types/tests, Python service and HTTP/HTTPS proxy tests, real Bun
+routing on Python 3.12–3.14 on Linux and 3.13 on macOS, real OpenSSH Docker tests,
+and Linux systemd unit syntax verification. It builds and validates an installed
+Python wheel. Dependency audits run on relevant changes, weekly and manually;
+Dependabot covers Python, npm, GitHub Actions and the Docker test image.
+
+The proxy suite covers streamed/chunked transfers, HTTPS certificate validation,
+half-closes, framing rejection, limits and shutdown. Service tests cover YAML/CLI
+validation, authorization, serialized rotation, cooldowns, cancellation, connection
+identity and SOCKS readiness. Plugin tests cover endpoint/error matching, discovery,
+process-wide environment leases and direct REST requests.
+
+## Release bundle verification
+
+With build, npm dependencies and Bun installed, generate the exact install bundle:
+
+```sh
+.venv/bin/python .github/scripts/build-release.py /tmp/tunnel-switch-release
+```
+
+The script builds Python wheel/sdist, verifies the installed packed plugin and
+assembles only distribution files plus example configuration and guides. The
+release workflow checks the checksum and installs the wheel into a fresh virtual
+environment. Never substitute live YAML or OpenCode configuration for examples.
+
 ## Releases
 
 Python and plugin versions are independent. Update `CHANGELOG.md` for changes
@@ -66,6 +106,16 @@ include `LICENSE`, and test the installed wheel's CLI. There is no PyPI publishi
 workflow; distributions can be attached to a separately named `service-v<version>`
 release. The plugin publisher skips `service-v` tags, so a service release does not
 trigger an npm publication.
+
+`Release install bundle` builds both components from the release revision and
+attaches `opencode-tunnel-switch-release.tar.gz` and `SHA256SUMS`. It also verifies
+bundles on relevant PRs without attaching a release. Publish a GitHub release
+only after its revision passes CI; wait for bundle attachment before sharing
+installation instructions. Manual dispatch accepts an existing release tag and
+checks out that tag, rather than the current main revision. Existing assets are
+not overwritten; a duplicate upload fails and must be investigated. There is
+currently no published GitHub release, so release installation becomes available
+when this workflow is merged and the first release finishes.
 
 The source tree's plugin 0.1.2 adds licensing but has not yet been published.
 Use published 0.1.1 until the next release is completed.
