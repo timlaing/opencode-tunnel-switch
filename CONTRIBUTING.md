@@ -24,6 +24,25 @@ its executable. Without it, that integration test is skipped. Local proxy tests
 need permission to bind loopback sockets. Validate example YAML with
 `.venv/bin/tunnel-switch validate --config examples/config.yaml`.
 
+Run the opt-in real SSH suite with Docker running and `ssh`/`ssh-keygen` installed:
+
+```sh
+TUNNEL_SWITCH_TEST_SSH=1 .venv/bin/python -m pytest -q -m ssh_integration
+```
+
+It builds the digest-pinned Debian fixture in `tests/fixtures/ssh`, starts two
+SSH containers per test on dynamically selected loopback ports, and generates
+fresh test keys. No personal SSH configuration or credentials are used. Tests
+verify forwarding through each server, rotation and process/socket cleanup,
+strict host-key rejection with recovery, and recovery after losing an SSH server.
+Containers and the tagged fixture image are removed on normal completion or test
+failure. If the test runner is forcibly killed, remove its remaining containers
+identified by `tunnel-switch.integration=true` after confirming none belong to
+another active test run. Docker privileges are needed only on the test host.
+The fixture's SSH configuration is test-only and must not be deployed.
+Explicit opt-in fails if Docker/tools are unavailable; ordinary runs skip these
+tests. Linux CI always enables them in the `Real SSH integration` job.
+
 Use the repository's configured no-reply email and GPG key for signed commits.
 Check `git log -1 --show-signature` before pushing. Do not commit live YAML,
 OpenCode config, `.npmrc`, registry tokens or generated package archives.
@@ -73,7 +92,7 @@ be reopened, and stale PR branches are retained.
 The intended ruleset is [.github/rulesets/main.json](.github/rulesets/main.json):
 PRs only, one approving review, dismissal of stale approvals, approval after
 the latest push by someone other than its author, resolved review threads,
-all six CI jobs passing against an up-to-date branch, linear history, no
+all seven CI jobs passing against an up-to-date branch, linear history, no
 force pushes or deletion, and no bypass actors. Review requires a second
 person; PR authors cannot approve their own changes.
 

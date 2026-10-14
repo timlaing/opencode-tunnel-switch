@@ -64,6 +64,10 @@
           {
             "context": "Deployment unit syntax",
             "integration_id": 15368
+          },
+          {
+            "context": "Real SSH integration",
+            "integration_id": 15368
           }
         ]
       }

@@ -12,7 +12,7 @@ claim every version combination or deployment has been tested.
 | OpenCode application | Local loading verified with v2.0.25 | Plugin listed as active and command registered; CI does not launch the complete application |
 | Linux | GitHub-hosted `ubuntu-latest` | Python/Bun integration tests; runner image changes over time |
 | macOS | GitHub-hosted `macos-14` | Python 3.13 and proxy/Bun integration tests |
-| OpenSSH | System `ssh` client with SOCKS forwarding | Unit tests use subprocess fixtures; deployment requires authentication, known hosts and forwarding permissions |
+| OpenSSH | System `ssh` client with SOCKS forwarding | Linux CI runs real OpenSSH servers in disposable Docker fixtures, testing forwarding, rotation, host-key rejection, server loss and cleanup; deployment credentials still require target-host checks |
 | systemd | Linux service example supplied | Unit syntax is checked in CI; deployment with real SSH credentials must be verified on its target host |
 | Windows | No verification claimed | No Windows CI or native service example |
 

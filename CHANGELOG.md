@@ -5,6 +5,10 @@ tags and npm publication describe the plugin unless explicitly stated otherwise.
 
 ## Unreleased
 
+- Real OpenSSH integration tests with disposable Docker servers: forwarding,
+  rotation, strict host-key rejection, server loss, recovery and cleanup; enabled
+  in Linux CI and available locally by explicit opt-in.
+
 - MIT license in the repository and both distribution formats; plugin 0.1.2 is
   prepared but not yet published.
 - Automatic issue/PR labels, stale handling and contribution guidance.
