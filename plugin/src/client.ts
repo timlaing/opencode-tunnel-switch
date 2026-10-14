@@ -19,12 +19,14 @@ export const Options = z.object({
 
 export type OptionsType = z.infer<typeof Options>;
 export type Failure = { type: string; message: string; status?: number };
+/** A rejected rotation whose timeout applies to retrying the current work request. */
 export class RotationRateLimit extends Error {
   /** Carry the wait before retrying work, without requesting another rotation. */
   constructor(message: string, readonly retryAfterMs: number) {
     super(message);
   }
 }
+/** Match configured exhaustion errors only for permitted providers and HTTP statuses. */
 export function detector(options: OptionsType) {
   const patterns = options.patterns.map((pattern) => new RegExp(pattern, "i"));
   return (provider: string, error: Failure) => options.providers.includes(provider)
@@ -61,6 +63,7 @@ export function makeClient(options: OptionsType, token: string, fetcher: typeof 
     return await response.text();
   }
   return {
+    /** Read tunnel status without rotating or using the tunnel proxy. */
     status: () => call("status", "GET"),
     /** Attempt one rotation, sharing in-flight calls and reporting remaining cooldowns. */
     rotate: () => {
