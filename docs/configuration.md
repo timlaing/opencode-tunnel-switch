@@ -121,6 +121,8 @@ The plugin's own REST calls explicitly use Bun's `proxy: false`, so rotation/sta
 
 Set `configureProxy: false` to opt out of environment changes. Set `http_proxy.enabled: false` only if you are managing forwarding elsewhere. The HTTP proxy streams request/response bodies and chunked transfers with bounded buffers. Ordinary HTTP connections close after one response; CONNECT tunnels remain open until EOF, an error or the idle timeout. HTTP Upgrade is unsupported; HTTPS destinations can negotiate their protocols inside CONNECT. Invalid requests return 400, unavailable SOCKS/destination connections return 502, and admission over the connection limit returns 503. It never falls back to a direct destination connection when SOCKS fails.
 
+For CONNECT tunnels, `idle_timeout_seconds` measures inactivity across both directions. An active response or upload keeps the tunnel alive even when the other direction is quiet; the default is 120 seconds with no traffic.
+
 The HTTP listener stays available during SSH rotation. Existing tunneled connections close when SSH exits, and subsequent connections use the replacement tunnel at the same SOCKS address. Ctrl-C closes both the HTTP proxy and SSH process.
 
 The HTTP and SOCKS listeners are unauthenticated and bind to loopback by default; the bearer token protects only the REST API. For LAN deployment, restrict proxy access to intended clients and use TLS for the REST token. Rotating a tunnel does not guarantee a provider quota reset, particularly for account limits.
