@@ -57,3 +57,27 @@ These changes apply to the entire OpenCode server process, all sessions and prov
 
 The plugin's own REST calls explicitly use Bun's `proxy: false`, so rotation/status still work while the SSH tunnel is unavailable. Unloading the plugin restores its prior environment without overwriting later external edits. If multiple project instances configure proxies in the same process, the latest loaded instance selects the process-wide proxy; all active instances' REST IPs stay bypassed. Unloading it restores the preceding instance. Use the same settings across projects sharing a server.
 
+
+## Tunnel sidebar
+
+The plugin includes a TUI entrypoint that adds a **Tunnel** section to OpenCode's
+session sidebar. It shows tunnel state, server name, connection ID, start time,
+uptime, HTTP proxy address, API availability and the time of the last check.
+OpenCode loads the package's `./tui` export automatically alongside the server
+plugin; local-directory installations use the root `tui.ts` entrypoint. Keep the
+sidebar visible to see the section and reload OpenCode after updating the plugin.
+
+The display reads `/status` at startup and every five seconds after the previous
+request finishes. Tunnel switches appear on the next refresh. Use
+`/tunnel-refresh` or **Refresh tunnel status** in the command palette for an
+immediate refresh. `/tunnel-status` still adds a status message to the session.
+These commands make no model request.
+
+When a status request fails or returns invalid data, the display marks the API
+unavailable and any previous connection information as stale. API reachability
+does not prove the SSH tunnel can reach a provider. Error response bodies and API
+tokens are never displayed. Polling stops when the TUI plugin unloads.
+
+The TUI reads the API from the terminal's machine using the configured API
+address and token. When attaching to a remote OpenCode server, that address must
+also be reachable from the terminal machine; loopback refers to the local machine.

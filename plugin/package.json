@@ -2,20 +2,24 @@
   "name": "@timlaing/opencode-tunnel-switch",
   "version": "1.1.0",
   "type": "module",
-  "exports": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./tui": "./tui.ts"
+  },
   "scripts": {
     "check": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
-    "test:coverage": "mkdir -p coverage && node --import tsx --experimental-test-coverage --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/*.test.ts"
+    "test:coverage": "mkdir -p coverage && node --import tsx --experimental-test-coverage --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/*.test.ts",
+    "test:tui": "node --conditions=browser --import tsx scripts/verify-tui.ts"
   },
   "dependencies": {
     "@opencode/plugin": "2.0.29",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.0",
+    "@types/node": "^24.0.0",
     "tsx": "^4.20.0",
-    "@types/node": "^24.0.0"
+    "typescript": "^5.9.0"
   },
   "main": "./index.ts",
   "description": "OpenCode v2 SSH tunnel rotation and proxy discovery plugin",
@@ -27,6 +31,7 @@
   "homepage": "https://github.com/timlaing/opencode-tunnel-switch#readme",
   "files": [
     "index.ts",
+    "tui.ts",
     "src/",
     "README.md"
   ],
@@ -34,5 +39,10 @@
     "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "peerDependencies": {
+    "@opentui/core": "^0.5.17",
+    "@opentui/solid": "^0.5.17",
+    "solid-js": "^1.9.12"
+  }
 }

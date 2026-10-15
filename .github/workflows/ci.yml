@@ -32,6 +32,11 @@ jobs:
           cache-dependency-path: plugin/package-lock.json
       - run: npm ci
       - run: npm run check
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.4.3'
+      - name: Verify sidebar rendering and refresh
+        run: bun --conditions=browser scripts/verify-tui.ts
       - run: npm run test:coverage
       - name: Normalize plugin LCOV paths to repository root
         run: sed -i 's|^SF:|SF:plugin/|' coverage/lcov.info

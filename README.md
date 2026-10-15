@@ -1,6 +1,6 @@
 # OpenCode v2 Tunnel Switch
 
-An OpenCode v2 plugin that detects server error message, rotates an HTTP proxy via an external REST server, and retries the current model request. It discovers the server's HTTP proxy and configures proxy environment variables for the OpenCode server process. `/tunnel-status` displays the connection without a model request.
+An OpenCode v2 plugin that detects server error message, rotates an HTTP proxy via an external REST server, and retries the current model request. It discovers the server's HTTP proxy and configures proxy environment variables for the OpenCode server process. The OpenCode sidebar displays live tunnel information; `/tunnel-refresh` refreshes it immediately, and `/tunnel-status` displays the connection without a model request.
 
 ## Install and run
 
