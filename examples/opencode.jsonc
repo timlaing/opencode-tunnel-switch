@@ -14,9 +14,7 @@
           "opencode"
         ],
         "patterns": [
-          "FreeUsageLimitError",
-          "free usage exceeded",
-          "rate limit exceeded\\. please try again later"
+          "Error"
         ],
         "timeoutMs": 25000,
         "cooldownMs": 30000
