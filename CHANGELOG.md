@@ -5,6 +5,9 @@ tags and npm publication describe the plugin unless explicitly stated otherwise.
 
 ## Unreleased
 
+- Fix HTTPS CONNECT streams closing at the idle timeout despite ongoing response
+  or upload traffic; measure inactivity across both directions of the tunnel.
+
 - Include the plugin lockfile in release bundles and install locked production
   dependencies with npm ci; validate that installation in release CI.
 - Disable shared Node/Bun caches in the release packaging workflow.
