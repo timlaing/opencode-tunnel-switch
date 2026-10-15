@@ -5,7 +5,8 @@
   "exports": "./index.ts",
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "node --import tsx --test test/*.test.ts",
+    "test:coverage": "mkdir -p coverage && node --import tsx --experimental-test-coverage --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/*.test.ts"
   },
   "dependencies": {
     "@opencode/plugin": "2.0.29",

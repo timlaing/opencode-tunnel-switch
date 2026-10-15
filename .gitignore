@@ -15,3 +15,10 @@ dist/
 
 *.state.json
 /state.json
+
+coverage.xml
+.coverage
+coverage/
+.scannerwork/
+
+.sonar-coverage/
