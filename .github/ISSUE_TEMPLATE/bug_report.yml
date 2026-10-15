@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a plugin, API, SSH tunnel or proxy problem.
+description: Report an OpenCode plugin problem. Report server problems in ssh-tunnel-switch.
 title: '[Bug]: '
 labels: [bug, needs-triage]
 body:
@@ -10,17 +10,15 @@ body:
       options:
         - OpenCode plugin loading or commands
         - Rate-limit detection or retry
-        - REST API or token configuration
-        - SSH connection or rotation
-        - HTTP proxy or HTTPS CONNECT
+        - Plugin API access or proxy discovery
     validations:
       required: true
   - type: textarea
     id: versions
     attributes:
       label: Versions and environment
-      description: Include the repository revision, OS, OpenCode, Python, Node and Bun versions where relevant.
-      placeholder: 'OS: ...; OpenCode: ...; Python: ...; Node: ...; Bun: ...; revision: ...'
+      description: Include the repository revision, OS, OpenCode, Node, Bun and external server versions where relevant.
+      placeholder: 'OS: ...; OpenCode: ...; server: ...; Node: ...; Bun: ...; revision: ...'
     validations:
       required: true
   - type: textarea
@@ -47,7 +45,7 @@ body:
     id: config
     attributes:
       label: Sanitized configuration
-      description: Include relevant YAML, the OpenCode plugin entry or SSH Host settings. Replace tokens, credentials, private keys and sensitive hostnames/addresses with placeholders.
+      description: Include the OpenCode plugin entry and relevant external server version. Replace tokens, credentials, private keys and sensitive hostnames/addresses with placeholders.
       render: text
   - type: checkboxes
     id: privacy

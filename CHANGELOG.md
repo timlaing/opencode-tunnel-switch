@@ -1,7 +1,15 @@
 # Changelog
 
-The Python service and OpenCode plugin have independent versions. GitHub release
-tags and npm publication describe the plugin unless explicitly stated otherwise.
+This repository releases the OpenCode plugin. The Python server is now maintained
+separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
+
+## Unreleased
+
+- Remove the Python server, its tests, deployment files and bundled releases.
+- Keep plugin CI, package publication and coverage; install the server separately
+  from the `ssh-tunnel-switch` PyPI package.
+
+Earlier entries below describe the repository before the server was extracted.
 
 ## Plugin 1.0.0 / Python service 1.0.0 — 2026-10-15
 

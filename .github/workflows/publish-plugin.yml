@@ -32,11 +32,6 @@ jobs:
           cache-dependency-path: plugin/package-lock.json
           registry-url: https://npm.pkg.github.com
           scope: '@timlaing'
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: pyproject.toml
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: '1.4.3'
@@ -56,11 +51,6 @@ jobs:
       - run: npm ci --prefix plugin
       - run: npm run check --prefix plugin
       - run: npm test --prefix plugin
-      - run: python -m pip install -e '.[test]'
-      - name: Verify service and Bun integration
-        run: python -m pytest -q
-        env:
-          TUNNEL_SWITCH_TEST_BUN: bun
       - name: Pack and verify the installed artifact
         working-directory: plugin
         run: |

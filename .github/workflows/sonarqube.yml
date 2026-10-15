@@ -26,13 +26,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.workflow_run.head_sha }}
-      - name: Download Python coverage from the successful CI run
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: python-coverage
-          path: .sonar-coverage/python
-          github-token: ${{ github.token }}
-          run-id: ${{ github.event.workflow_run.id }}
       - name: Download plugin coverage from the successful CI run
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -54,11 +47,9 @@ jobs:
           sha = os.environ['HEAD_SHA']
           if not re.fullmatch('[0-9a-f]{40}', sha):
               raise ValueError('Invalid CI revision')
-          revision = Path('.sonar-coverage/python/coverage-revision.txt').read_text().strip()
+          revision = Path('.sonar-coverage/plugin/coverage-revision.txt').read_text().strip()
           if not re.fullmatch('[0-9a-f]{40}', revision):
               raise ValueError('Invalid coverage revision')
-          if Path('.sonar-coverage/plugin/coverage-revision.txt').read_text().strip() != revision:
-              raise ValueError('Python and plugin coverage revisions differ')
           args = [f'-Dsonar.scm.revision={revision}']
           if os.environ['RUN_EVENT'] == 'pull_request':
               pulls = json.loads(subprocess.check_output(['gh', 'api', f"repos/{os.environ['GH_REPO']}/commits/{sha}/pulls"], text=True))
@@ -86,12 +77,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           clean: false # Preserve the downloaded coverage reports.
-      - name: Validate coverage without executing repository code
-        run: |
-          python3 - <<'PYCODE'
-          import xml.etree.ElementTree as ET
-          ET.parse('.sonar-coverage/python/coverage.xml')
-          PYCODE
       - name: Remove pull-request-controlled scanner configuration
         run: rm -f sonar-project.properties
       - name: Require SonarQube credentials
@@ -108,10 +93,8 @@ jobs:
             -Dsonar.projectKey=timlaing_opencode-tunnel-switch
             -Dsonar.organization=timlaing
             -Dsonar.projectName=opencode-tunnel-switch
-            -Dsonar.sources=src/tunnel_switch,plugin/src,plugin/scripts,plugin/index.ts,.github
-            -Dsonar.tests=tests,plugin/test
-            -Dsonar.python.version=3.12,3.13,3.14
-            -Dsonar.python.coverage.reportPaths=.sonar-coverage/python/coverage.xml
+            -Dsonar.sources=plugin/src,plugin/scripts,plugin/index.ts,.github
+            -Dsonar.tests=plugin/test
             -Dsonar.exclusions=**/__pycache__/**,**/node_modules/**,**/dist/**
             -Dsonar.javascript.lcov.reportPaths=.sonar-coverage/plugin/lcov.info
             -Dsonar.qualitygate.wait=true

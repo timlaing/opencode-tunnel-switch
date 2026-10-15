@@ -31,9 +31,7 @@ jobs:
               const components = {
                 'OpenCode plugin loading or commands': 'area: plugin',
                 'Rate-limit detection or retry': 'area: plugin',
-                'REST API or token configuration': 'area: api',
-                'SSH connection or rotation': 'area: ssh',
-                'HTTP proxy or HTTPS CONNECT': 'area: proxy',
+                'Plugin API access or proxy discovery': 'area: plugin',
               };
               if (components[component]) labels.add(components[component]);
             } else {

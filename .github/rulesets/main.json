@@ -44,30 +44,6 @@
           {
             "context": "Plugin types and tests",
             "integration_id": 15368
-          },
-          {
-            "context": "Python 3.12 / ubuntu-latest",
-            "integration_id": 15368
-          },
-          {
-            "context": "Python 3.13 / ubuntu-latest",
-            "integration_id": 15368
-          },
-          {
-            "context": "Python 3.14 / ubuntu-latest",
-            "integration_id": 15368
-          },
-          {
-            "context": "Python 3.13 / macos-14",
-            "integration_id": 15368
-          },
-          {
-            "context": "Deployment unit syntax",
-            "integration_id": 15368
-          },
-          {
-            "context": "Real SSH integration",
-            "integration_id": 15368
           }
         ]
       }

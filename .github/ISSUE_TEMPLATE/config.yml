@@ -3,3 +3,6 @@ contact_links:
   - name: Troubleshooting guide
     url: https://github.com/timlaing/opencode-tunnel-switch/blob/main/docs/troubleshooting.md
     about: Check configuration, installation and plugin-loading diagnostics before opening an issue.
+  - name: SSH Tunnel Switch server
+    url: https://github.com/timlaing/ssh-tunnel-switch
+    about: Server installation, configuration, SSH, API and proxy issues belong in the server repository.

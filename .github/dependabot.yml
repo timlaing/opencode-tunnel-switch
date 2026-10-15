@@ -17,15 +17,3 @@ updates:
     groups:
       development-dependencies:
         dependency-type: development
-  - package-ecosystem: pip
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-  - package-ecosystem: docker
-    directory: /tests/fixtures/ssh
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 2
