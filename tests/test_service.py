@@ -467,3 +467,28 @@ async def test_cancelled_state_save_finishes_before_next_rotation(manager, tmp_p
         assert json.loads(path.read_text())["server"] == "two"
     finally:
         await manager.close()
+
+
+def test_cli_config_discovery(tmp_path, monkeypatch):
+    from pathlib import Path
+    from tunnel_switch.cli import resolve_config
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(tmp_path)
+    local = tmp_path / "config.yaml"
+    local.write_text(json.dumps(config().model_dump(mode="json")))
+    assert resolve_config(None) == Path("config.yaml")
+    assert CliRunner().invoke(app, ["validate"]).exit_code == 0
+    preferred = tmp_path / "home/.config/opencode-tunnel-switch/config.yaml"
+    preferred.parent.mkdir(parents=True)
+    preferred.write_text(local.read_text())
+    local.write_text("invalid local configuration")
+    assert resolve_config(None) == preferred
+    assert CliRunner().invoke(app, ["validate"]).exit_code == 0
+    assert CliRunner().invoke(app, ["validate", "--config", str(local)]).exit_code != 0
+    preferred.write_text("invalid preferred configuration")
+    local.write_text(json.dumps(config().model_dump(mode="json")))
+    assert CliRunner().invoke(app, ["validate"]).exit_code != 0
+    preferred.unlink()
+    local.unlink()
+    assert CliRunner().invoke(app, ["validate"]).exit_code != 0

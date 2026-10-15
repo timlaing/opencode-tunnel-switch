@@ -37,6 +37,11 @@ Authenticate to each SSH server once using your normal SSH client and verify its
 
 The API token lives in `api.token` in the YAML file. On startup, `serve` generates and saves a random token if the field is missing, null or blank. Existing tokens are reused. In both cases it prints `API token: ...` to the console before starting the API. Generated-token writes are atomic, preserve YAML comments, and save the file with mode 0600. If saving fails, startup fails rather than using an unsaved token.
 
+When `--config` is omitted, all CLI commands use
+`~/.config/opencode-tunnel-switch/config.yaml` if it exists, otherwise
+`./config.yaml` in the current working directory. An explicit `--config` takes
+precedence. Invalid or unreadable files report an error without falling back.
+
 ```sh
 .venv/bin/tunnel-switch validate --config config.yaml
 .venv/bin/tunnel-switch serve --config config.yaml
