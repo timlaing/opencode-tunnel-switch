@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a change to the plugin, service or configuration.
+description: Suggest a change to the plugin or its OpenCode configuration.
 title: '[Feature]: '
 labels: [enhancement, needs-triage]
 body:

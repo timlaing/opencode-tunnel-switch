@@ -17,32 +17,10 @@ No response-time guarantee or older-release support commitment is offered.
 Security fixes target the current development branch and the latest releases;
 upgrade both components when a fix affects their interaction.
 
-## Deployment boundaries
+## Plugin boundaries
 
-- The bearer token protects REST status and rotation endpoints. HTTP and SOCKS
-  proxy listeners have no authentication. Use loopback or firewall access limited
-  to intended clients; do not expose an unrestricted proxy to the Internet.
-- Use TLS in front of a remotely accessed REST API. HTTPS CONNECT transports
-  destination TLS unchanged; the service does not decrypt it.
-- The YAML and OpenCode configuration contain the REST token. Keep both private.
-  The CLI deliberately prints the token at every startup, including to systemd
-  journal logs. Restrict log access and redact diagnostics before sharing.
-- Protect the dedicated SSH key and verify host keys. The service uses batch
-  authentication and strict host-key checking. It runs as one account and reads
-  that account's SSH configuration. Configuration-write access can change hosts
-  and exposed listeners, so grant it only to trusted administrators.
-- Token rotation: stop the service, replace `api.token` with a fresh secret (or
-  set it to null to generate one on the next startup), start the service, update
-  every plugin's `apiToken`, and reload those plugins. Existing tokens are loaded
-  at startup; editing the file alone does not revoke the running token.
-- Run one API worker and one service instance per SOCKS socket. Coordination is
-  within one process, not across multiple instances.
-- The plugin changes proxy variables for the whole OpenCode process. All sessions
-  and environment-aware providers can route through the selected SSH server.
-  Existing connections may survive until rotation; bypass hosts route directly.
-- Forwarding fails when SOCKS is unavailable. Tunnel rotation does not establish
-  that a provider quota was reset and does not replace provider account controls.
+The plugin stores a server bearer token in OpenCode configuration. Keep it private and use TLS for remote REST access. It changes proxy variables for the whole OpenCode process, affecting all sessions and environment-aware providers. Existing bypass entries can allow direct connections. Tunnel rotation does not guarantee provider quota recovery.
 
-Dependency audits and updates complement review; passing audits are not a claim
-that the code has no vulnerabilities. See the [deployment guide](docs/deployment.md)
-for service-account and filesystem settings.
+Server token management, SSH keys, proxy listener access and service deployment are maintained in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch). Report server vulnerabilities using that project's security policy.
+
+Dependency audits and updates complement review; passing audits are not a claim that the code has no vulnerabilities.

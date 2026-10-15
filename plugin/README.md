@@ -2,7 +2,7 @@
 
 OpenCode v2 plugin that discovers the Python service's HTTP proxy, configures proxy environment variables for the OpenCode server process, and rotates an SSH SOCKS tunnel when a configured provider reports exhausted free usage. `/tunnel-status` displays the current connection ID and start time without a model request.
 
-The Python service must be running before plugin startup. See the repository [setup guide](https://github.com/timlaing/opencode-tunnel-switch#readme).
+The external [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch) server, available on [PyPI](https://pypi.org/project/ssh-tunnel-switch/), must be running before plugin startup. See the repository [setup guide](https://github.com/timlaing/opencode-tunnel-switch#readme).
 
 After a successful tunnel switch, the plugin requests that OpenCode retry the current model request after one second, continuing the existing work automatically. Status display runs independently so a slow or failed notification cannot delay continuation. If a switch returns 429 (for example, another switch is already in progress), only the current work request is retried after `Retry-After`; the switch is not retried in that retry sequence. A local cooldown similarly delays the work request until it expires. Other switch failures stop the retry, and OpenCode's retry limit still applies.
 
@@ -42,7 +42,7 @@ The REST token is separate from GitHub registry credentials. Proxy IP/port are d
 
 ## Publishing
 
-The repository's `Publish plugin` workflow tests the plugin and Python/Bun integration, checks the package allowlist, installs the packed tarball and verifies its OpenCode entrypoint before publishing that exact archive to `https://npm.pkg.github.com`.
+The repository's `Publish plugin` workflow runs plugin types and tests, checks the package allowlist, installs the packed tarball and verifies its OpenCode entrypoint before publishing that exact archive to `https://npm.pkg.github.com`.
 
 Publishing runs when a GitHub release is published, or manually on `main`. A release tag must be `v<package-version>` or `plugin-v<package-version>`, matching `package.json`. Update the manifest and lockfile version before releasing a new version. Published versions cannot be overwritten.
 

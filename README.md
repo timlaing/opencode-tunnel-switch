@@ -1,112 +1,45 @@
 # OpenCode v2 Tunnel Switch
 
-An OpenCode v2 plugin detects the reported `Error: Rate limit exceeded. Please try again later.` error for the `opencode` provider and calls a Python REST service to rotate an SSH SOCKS5 tunnel. The same Python process exposes an HTTP forward proxy and HTTPS CONNECT bridge through the SSH SOCKS5 listener. The plugin configures proxy environment variables for the whole OpenCode server process at startup. The service stops its current SSH process, advances through the YAML server list in order, waits for a successful SOCKS5 handshake, and returns the new connection ID and UTC start time.
-
-## Guides
-
-- [Configuration and API reference](docs/configuration.md)
-- [Deployment and systemd service](docs/deployment.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Compatibility](docs/compatibility.md)
-- [Verification](CONTRIBUTING.md#verification)
-- [Development, releases and contribution policy](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
-- [Changelog](CHANGELOG.md)
+An OpenCode v2 plugin that detects provider free-usage limits, rotates an SSH tunnel through an external REST server, and retries the current model request. It discovers the server's HTTP proxy and configures proxy environment variables for the OpenCode server process. `/tunnel-status` displays the connection without a model request.
 
 ## Install and run
 
-Requires Python 3.12+, OpenSSH, Node/npm for the plugin's runtime dependencies,
-and OpenCode v2. Source development and tests are documented in
-[CONTRIBUTING.md](CONTRIBUTING.md#development).
-
-Download the install bundle from a [GitHub release](https://github.com/timlaing/opencode-tunnel-switch/releases).
-This repository is private, so authenticate with GitHub CLI using an account with
-repository access. Releases must have both assets below before installing.
-There are no published GitHub releases yet; the release workflow will provide
-these assets when the first release is published.
+The Python server now lives in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch) and is available on [PyPI](https://pypi.org/project/ssh-tunnel-switch/):
 
 ```sh
-gh auth login
-gh release download --repo timlaing/opencode-tunnel-switch \
-  --pattern opencode-tunnel-switch-release.tar.gz --pattern SHA256SUMS
-# Linux:
-sha256sum -c SHA256SUMS
-# On macOS use: shasum -a 256 -c SHA256SUMS
-tar -xzf opencode-tunnel-switch-release.tar.gz
-cd opencode-tunnel-switch
-python3 -m venv .venv
-.venv/bin/python -m pip install service/*.whl
-npm ci --prefix plugin --omit=dev --ignore-scripts
-cp examples/config.yaml config.yaml
-chmod 600 config.yaml
+python3 -m pip install ssh-tunnel-switch
 ```
 
-The bundle includes the Python wheel/sdist, the plugin's production files,
-example configuration, documentation, a systemd unit, and `versions.json`.
-No source checkout, editable Python install, test dependencies or plugin build
-is required. Checksums detect a damaged download; trust the release and its
-publisher as well. To select a specific release, put its tag immediately after
-`gh release download`.
+Follow the server repository's instructions to configure SSH servers and start the service. This repository contains only the OpenCode plugin; server configuration, deployment, tests and Python releases are maintained there.
 
-## Simple configuration
-
-Set your SSH aliases in `config.yaml`. This example uses your existing SSH config
-and keeps the SOCKS proxy local:
-
-```yaml
-servers:
-  - host: ssh-one
-  - host: ssh-two
-proxy:
-  ip: 127.0.0.1
-  port: 1080
-```
-
-Verify SSH authentication and host keys for both aliases, then start the service:
-
-```sh
-.venv/bin/tunnel-switch validate --config config.yaml
-.venv/bin/tunnel-switch serve --config config.yaml
-```
-
-Startup generates and saves an API token when needed and prints it to the console.
-Merge this into `opencode.json`, using the extracted plugin's absolute path and
-that token:
+Install the plugin using the [GitHub Packages guide](plugin/README.md), then add it to your OpenCode configuration:
 
 ```json
 {
   "plugin": [
     [
-      "/absolute/path/to/opencode-tunnel-switch/plugin",
+      "@timlaing/opencode-tunnel-switch@1.0.0",
       {
         "apiIp": "127.0.0.1",
         "apiPort": 8765,
-        "apiToken": "paste-the-token-displayed-by-the-service"
+        "apiToken": "copy-the-token-from-your-server"
       }
     ]
   ]
 }
 ```
 
-Start OpenCode after the service, then use `/tunnel-status` to check the connection.
-The HTTP proxy is discovered automatically. Defaults bind the API and HTTP proxy
-to loopback on ports 8765 and 8118. Keep the token and startup output private.
+Start the server before OpenCode, then use `/tunnel-status` to verify access. Keep the API token private. For local source installation, use the checkout's absolute `plugin` directory as the package path and install dependencies with `npm ci --prefix plugin`.
 
-See the [configuration guide](docs/configuration.md) for all YAML/plugin options,
-SSH overrides, remote access, proxy behavior and API endpoints. For loading or
-connection errors, see [troubleshooting](docs/troubleshooting.md).
+## Guides
 
-## Release and development information
-
-Release bundles are built and checked by `Release install bundle`, then attached
-to a published GitHub release. The plugin is also available separately through
-private GitHub Packages; see its [package guide](plugin/README.md) for registry
-authentication. The bundle installation above needs GitHub repository access and
-public npm dependency access, but no GitHub Packages authentication.
-
-Development setup, [verification](CONTRIBUTING.md#verification), publishing and
-repository maintenance are documented in [CONTRIBUTING.md](CONTRIBUTING.md). See
-[compatibility](docs/compatibility.md) for runtime requirements.
+- [Plugin configuration and proxy discovery](docs/configuration.md)
+- [External server deployment](docs/deployment.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Compatibility](docs/compatibility.md)
+- [Development, verification and releases](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
 ## License
 
