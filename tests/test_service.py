@@ -531,7 +531,30 @@ def test_state_directory_sync_failure_closes_handle(tmp_path, monkeypatch):
     monkeypatch.setattr("tunnel_switch.state.os.fsync", sync)
     with pytest.raises(OSError, match="directory sync failed"):
         save_last_server(tmp_path / "state.json", config().servers[0])
-    assert len(directories) == 1
+    assert len(directories) == 2
     with pytest.raises(OSError):
         os.fstat(directories[0])
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory fsync")
+async def test_failed_directory_sync_restores_saved_selection(manager, tmp_path, monkeypatch):
+    import stat
+    from tunnel_switch.state import load_last_server
+
+    path = tmp_path / "state.json"
+    manager.config.state_file = path
+    await manager.rotate()
+    previous = path.read_bytes()
+    fsync = os.fsync
+    def sync(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError("directory sync failed")
+        fsync(fd)
+    monkeypatch.setattr("tunnel_switch.state.os.fsync", sync)
+    with pytest.raises(TunnelFailure, match="directory sync failed"):
+        await manager.rotate()
+    assert manager.process is None
+    assert path.read_bytes() == previous
+    assert load_last_server(path, manager.config.servers) == 0
     assert [p.name for p in tmp_path.iterdir()] == ["state.json"]
