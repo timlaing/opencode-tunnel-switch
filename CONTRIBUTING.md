@@ -21,6 +21,10 @@ npm run check --prefix plugin
 npm test --prefix plugin
 ```
 
+GitHub CodeQL default setup scans JavaScript/TypeScript and Actions workflows.
+The active ruleset requires its security analysis; keep CodeQL enabled when
+maintaining that rule.
+
 CI runs plugin types, tests and LCOV coverage on Node.js 24. Tests cover API requests, error matching, retry decisions, discovery, environment leases and publishing helpers. Python server, proxy and SSH integration tests belong to the server repository.
 
 To verify the packed plugin with Bun installed, run from `plugin`:
