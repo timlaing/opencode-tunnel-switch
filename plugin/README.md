@@ -6,6 +6,13 @@ The external [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch) 
 
 After a successful tunnel switch, the plugin requests that OpenCode retry the current model request after one second, continuing the existing work automatically. Status display runs independently so a slow or failed notification cannot delay continuation. If a switch returns 429 (for example, another switch is already in progress), only the current work request is retried after `Retry-After`; the switch is not retried in that retry sequence. A local cooldown similarly delays the work request until it expires. Other switch failures stop the retry, and OpenCode's retry limit still applies.
 
+The OpenCode session sidebar also includes a **Tunnel** section with connection
+state, server, ID, start time, uptime, proxy address and API availability. It
+refreshes every five seconds; `/tunnel-refresh` refreshes immediately. Failed
+checks mark previous details stale. Reload OpenCode after updating the plugin.
+The TUI uses the same API options from the terminal machine, so remote-server
+setups need an API address reachable from that machine.
+
 ## Install from public GitHub Packages
 
 The package is distributed through GitHub Packages. Public npm packages on this registry still require authentication, as documented by [GitHub](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages). Use a GitHub personal access token (classic) with `read:packages`:
@@ -39,6 +46,15 @@ Keep registry credentials in your npm user configuration, not the repository. Co
 ```
 
 The REST token is separate from GitHub registry credentials. Proxy IP/port are discovered automatically from `/status`. OpenCode's Bun runtime loads the shipped TypeScript root `index.ts`; no consumer build step is required. Local development can still configure the absolute `plugin` directory instead of the package name.
+
+## Serializer dependency
+
+OpenTUI currently requires a Solid version that constrains Seroval to a vulnerable
+release range. This checkout overrides Seroval to `^1.6.9` and audits that resolved
+tree. npm applies overrides only from the installing root project: applications
+installing this package must also enforce a patched Seroval version in their root
+dependency configuration. This package's override does not patch OpenCode's own
+bundled dependencies.
 
 ## Publishing
 

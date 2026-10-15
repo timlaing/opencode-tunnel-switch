@@ -19,13 +19,14 @@ Use the repository's configured no-reply email and GPG key for signed commits. C
 ```sh
 npm run check --prefix plugin
 npm test --prefix plugin
+bun --conditions=browser plugin/scripts/verify-tui.ts
 ```
 
 GitHub CodeQL default setup scans JavaScript/TypeScript and Actions workflows.
 The active ruleset requires its security analysis; keep CodeQL enabled when
 maintaining that rule.
 
-CI runs plugin types, tests and LCOV coverage on Node.js 24. Tests cover API requests, error matching, retry decisions, discovery, environment leases and publishing helpers. Python server, proxy and SSH integration tests belong to the server repository.
+CI runs plugin types, tests and LCOV coverage on Node.js 24, plus the OpenTUI renderer verification on Bun. The renderer verification can also run locally on Node.js 26 with `npm run test:tui --prefix plugin`. Tests cover API requests, error matching, retry decisions, discovery, environment leases and publishing helpers. Python server, proxy and SSH integration tests belong to the server repository.
 
 To verify the packed plugin with Bun installed, run from `plugin`:
 
@@ -35,6 +36,11 @@ bun scripts/verify-package.ts /tmp/tunnel-switch-plugin-pack.json
 ```
 
 OpenCode SDK is pinned to `@opencode/plugin` 2.0.29. Local application loading was previously verified with OpenCode v2.0.25; CI does not launch the full application. See [troubleshooting](docs/troubleshooting.md) for discovery checks.
+
+The plugin manifest overrides Seroval to `^1.6.9` because OpenTUI's required
+Solid version otherwise resolves a vulnerable `~1.5.x` serializer. Keep this
+override until the upstream dependency constraint includes a patched version;
+verify changes with `npm audit` and the TUI renderer check.
 
 ## Releases
 
