@@ -5,6 +5,11 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+- Configure plugin publishing for public GitHub Packages and verify repository
+  and package visibility before publication.
+- Update installation, security reporting, contribution and Sonar documentation
+  for the public repository; retain GitHub npm authentication instructions.
+
 - Remove the Python server, its tests, deployment files and bundled releases.
 - Keep plugin CI, package publication and coverage; install the server separately
   from the `ssh-tunnel-switch` PyPI package.

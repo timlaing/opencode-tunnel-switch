@@ -12,7 +12,7 @@ python3 -m pip install ssh-tunnel-switch
 
 Follow the server repository's instructions to configure SSH servers and start the service. This repository contains only the OpenCode plugin; server configuration, deployment, tests and Python releases are maintained there.
 
-Install the plugin using the [GitHub Packages guide](plugin/README.md), then add it to your OpenCode configuration:
+Install the plugin using the [public GitHub Packages guide](plugin/README.md), then add it to your OpenCode configuration:
 
 ```json
 {

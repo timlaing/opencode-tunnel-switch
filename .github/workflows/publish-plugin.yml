@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   publish:
-    name: Verify and publish private npm package
+    name: Verify and publish public npm package
     if: github.repository == 'timlaing/opencode-tunnel-switch' && ((github.event_name == 'release' && !startsWith(github.event.release.tag_name, 'service-v')) || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -41,7 +41,7 @@ jobs:
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          if (pkg.name !== '@timlaing/opencode-tunnel-switch' || pkg.private === true || pkg.publishConfig.registry !== 'https://npm.pkg.github.com')
+          if (pkg.name !== '@timlaing/opencode-tunnel-switch' || pkg.private === true || pkg.publishConfig.registry !== 'https://npm.pkg.github.com' || pkg.publishConfig.access !== 'public')
             throw new Error('Unexpected package publishing configuration');
           if (process.env.GITHUB_EVENT_NAME === 'release' && ![`v${pkg.version}`, `plugin-v${pkg.version}`].includes(process.env.RELEASE_TAG))
             throw new Error('Release tag must match the plugin package version');
@@ -56,11 +56,17 @@ jobs:
         run: |
           npm pack --json > "$RUNNER_TEMP/plugin-pack.json"
           bun scripts/verify-package.ts "$RUNNER_TEMP/plugin-pack.json"
-      - name: Require a private repository
+      - name: Require a public repository
         run: |
-          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private')" = true
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility')" = public
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Require public package visibility
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub package visibility is managed separately from npm access.
+          test "$(gh api users/timlaing/packages/npm/opencode-tunnel-switch --jq '.visibility')" = public
       - name: Publish the tested archive
         working-directory: plugin
         run: node scripts/publish-package.mjs "$RUNNER_TEMP/plugin-pack.json"
