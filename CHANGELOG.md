@@ -5,28 +5,29 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+## [1.2.0] - 2026-10-15
+
+- Add a live Tunnel section to the OpenCode sidebar with connection details,
+  API availability, stale-data handling and `/tunnel-refresh`.
+- Override the Solid serializer dependency to patched Seroval `^1.6.9` and
+  document the root-install override requirement.
 - Simplify retry-delay parsing without changing Retry-After handling.
 - Disable dependency lifecycle scripts in CI and publishing installs. Read pack
   metadata from stdin and invoke npm through its parent-provided absolute CLI path.
 
-- Override the Solid serializer dependency to patched Seroval `^1.6.9` and
-  document the root-install override requirement.
-
-- Add a live Tunnel section to the OpenCode sidebar with connection details,
-  API availability, stale-data handling and `/tunnel-refresh`.
+## [1.1.0] - 2026-10-15
 
 - Configure plugin publishing for public GitHub Packages and verify repository
   and package visibility before publication.
 - Update installation, security reporting, contribution and Sonar documentation
   for the public repository; retain GitHub npm authentication instructions.
-
 - Remove the Python server, its tests, deployment files and bundled releases.
 - Keep plugin CI, package publication and coverage; install the server separately
   from the `ssh-tunnel-switch` PyPI package.
 
 Earlier entries below describe the repository before the server was extracted.
 
-## Plugin 1.0.0 / Python service 1.0.0 — 2026-10-15
+## [1.0.0] - 2026-10-15
 
 - Remember the last successful SSH server across restarts in an atomic state file,
   defaulting to ~/.config/opencode-tunnel-switch/state.json.
@@ -59,14 +60,14 @@ Earlier entries below describe the repository before the server was extracted.
 - Deployment, security, compatibility and troubleshooting guides, with a Linux
   systemd unit and syntax verification.
 
-## Plugin 0.1.1 — 2026-10-14
+## [0.1.1] - 2026-10-14
 
 - Published privately to GitHub Packages as `@timlaing/opencode-tunnel-switch`.
 - Added registry readback verification of version, archive integrity and repository
   link, replacing an unreliable private-package listing API check.
 - Documented private registry authentication and OpenCode installation.
 
-## Plugin 0.1.0 / Python service 0.1.0 — 2026-10-14
+## [0.1.0] - 2026-10-14
 
 - OpenCode v2 rate-limit detection, serialized REST rotation and `/tunnel-status`.
 - SSH server lists, host-only aliases inheriting the service account's SSH config,

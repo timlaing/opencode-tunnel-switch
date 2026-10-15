@@ -60,6 +60,6 @@ bundled dependencies.
 
 The repository's `Publish plugin` workflow runs plugin types and tests, checks the package allowlist, installs the packed tarball and verifies its OpenCode entrypoint before publishing that exact archive to `https://npm.pkg.github.com`.
 
-Publishing runs when a GitHub release is published, or manually on `main`. A release tag must be `v<package-version>` or `plugin-v<package-version>`, matching `package.json`. Update the manifest and lockfile version before releasing a new version. Published versions cannot be overwritten.
+Publishing runs when a GitHub release is published, or manually on `main`. A release tag must be `v<package-version>`, matching `package.json`. Update the manifest and lockfile version before releasing a new version. Published versions cannot be overwritten.
 
 Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no publishing PAT or repository secret is required. The package is linked to the public repository. The manifest requests public access; the workflow checks that both the repository and existing GitHub package are public before publishing. GitHub package visibility is a separate setting: maintainers manage it under [package settings](https://github.com/users/timlaing/packages/npm/opencode-tunnel-switch/settings), rather than relying on npm access flags. The workflow reads the published version back from the npm registry and verifies its archive integrity and repository link. Do not set the npm `private: true` flag, which prohibits publication.
