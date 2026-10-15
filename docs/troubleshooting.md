@@ -48,8 +48,8 @@ opencode service restart
 ```
 
 For private-package authentication, follow the [package guide](../plugin/README.md).
-Confirm that the requested version exists in GitHub Packages; source-tree version
-0.1.2 is currently prepared for release, while published version 0.1.1 is available.
+Confirm that the requested version exists in GitHub Packages and that its
+publication workflow completed successfully.
 During local development avoid running `npm ci` against dependencies used by an
 active OpenCode process; it removes `node_modules`. Stop that process or use an
 isolated checkout for clean-install verification.

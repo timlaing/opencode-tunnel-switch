@@ -139,12 +139,11 @@ bundles on relevant PRs without attaching a release. Publish a GitHub release
 only after its revision passes CI; wait for bundle attachment before sharing
 installation instructions. Manual dispatch accepts an existing release tag and
 checks out that tag, rather than the current main revision. Existing assets are
-not overwritten; a duplicate upload fails and must be investigated. There is
-currently no published GitHub release, so release installation becomes available
-when this workflow is merged and the first release finishes.
+not overwritten; a duplicate upload fails and must be investigated. Release installation requires the bundle and checksums attached by a successful
+release workflow.
 
-The source tree's plugin 0.1.2 adds licensing but has not yet been published.
-Use published 0.1.1 until the next release is completed.
+The 1.0.0 release versions both the plugin and bundled Python service as 1.0.0.
+Confirm registry publication and bundle attachment before installing a release.
 
 ## Labels and triage
 
