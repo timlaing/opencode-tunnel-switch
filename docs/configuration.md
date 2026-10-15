@@ -19,7 +19,9 @@ Edit `config.yaml` with your SSH host aliases and the SOCKS, HTTP proxy and API 
 | `cooldown_seconds` | `30` | Minimum time after a completed or failed rotation before the next attempt; zero disables cooldown |
 | `startup_timeout_seconds` | `15` | SSH connection/readiness deadline, greater than zero and at most 120 seconds |
 | `stop_timeout_seconds` | `5` | Wait before forcibly killing an SSH process, greater than zero and at most 60 seconds |
-| `start_on_launch` | `true` | Start the first SSH server when the API starts |
+| `start_on_launch` | `true` | Start the saved SSH server (or the first server without saved state) when the API starts |
+| `state_file` | `~/.config/opencode-tunnel-switch/state.json` | Last successfully connected server; `null` disables persistence |
+| `server_name` | `null` | Optional starting server name, overriding saved state |
 
 A host-only server list can use existing SSH config aliases:
 
@@ -35,14 +37,62 @@ Authenticate to each SSH server once using your normal SSH client and verify its
 
 The API token lives in `api.token` in the YAML file. On startup, `serve` generates and saves a random token if the field is missing, null or blank. Existing tokens are reused. In both cases it prints `API token: ...` to the console before starting the API. Generated-token writes are atomic, preserve YAML comments, and save the file with mode 0600. If saving fails, startup fails rather than using an unsaved token.
 
+When `--config` is omitted, all CLI commands use
+`~/.config/opencode-tunnel-switch/config.yaml` if it exists, otherwise
+`./config.yaml` in the current working directory. An explicit `--config` takes
+precedence. Invalid or unreadable files report an error without falling back.
+
 ```sh
 .venv/bin/tunnel-switch validate --config config.yaml
 .venv/bin/tunnel-switch serve --config config.yaml
 ```
 
-Copy the displayed token into the plugin's `apiToken` option in `opencode.json`. No token environment variable is used. `status` and `rotate` read the saved YAML token; they do not generate one. `serve` starts the first tunnel unless `start_on_launch: false`. Ctrl-C cleans up its SSH process. Each command supports `--help`; command/configuration/network failures print an error and CLI help with a nonzero exit code.
+Copy the displayed token into the plugin's `apiToken` option in `opencode.json`. No token environment variable is used. `status` and `rotate` read the saved YAML token; they do not generate one. `serve` resumes the saved SSH server unless `start_on_launch: false`; without saved state it starts the first server. Ctrl-C cleans up its SSH process. Each command supports `--help`; command/configuration/network failures print an error and CLI help with a nonzero exit code.
 
 Run exactly one service process for a given SOCKS socket. The supplied CLI uses one Uvicorn worker, without reload. It manages only SSH processes it spawned. An existing process occupying the SOCKS address is rejected rather than terminated. The cooldown also applies after startup and failed rotations, so an immediate rotation within the default 30 seconds returns 429.
+
+## Restart state and startup selection
+
+The service saves the last successfully connected server to
+`~/.config/opencode-tunnel-switch/state.json` by default, using the home of the
+account running it. On restart it reconnects to that server, then subsequent
+rotations advance through the configured list. Servers are identified by name
+and host rather than list position, so reordering the YAML does not lose the
+selection. Each new SSH session still has a fresh connection ID and start time.
+
+Configure a different file in YAML or override it for a single run:
+
+```yaml
+state_file: ~/.config/opencode-tunnel-switch/state.json
+server_name: null
+```
+
+```sh
+.venv/bin/tunnel-switch serve --config config.yaml --state-file /path/to/state.json
+.venv/bin/tunnel-switch serve --config config.yaml --server-name two
+```
+
+`--server-name` selects a server by its configured `name`. It takes precedence
+over YAML `server_name` and saved state for the first connection, including the
+first manual rotation when `start_on_launch` is false. A successful connection
+updates the file even when selected explicitly. Later rotations advance normally.
+Unknown server names are rejected. YAML state paths are relative to the YAML
+file; relative CLI state paths use the current working directory. `~` expands
+for the service account. Use a separate state file for each service instance.
+
+Missing files, or saved servers removed/renamed in YAML, start at the first server.
+Malformed, unsupported-version or unreadable state files cause startup to fail
+with an error; move the file aside or explicitly select `--server-name` to
+replace invalid contents on the next successful connection. Set `state_file: null`
+in YAML to opt out. `--state-file` overrides that opt-out.
+
+State is written only after SSH readiness succeeds, using atomic replacement and
+mode 0600. Parent directories are created as needed; the service account needs
+write access there. Failed SSH attempts leave the previous saved selection intact.
+A persistence failure fails that rotation and closes its new SSH process rather
+than reporting an unremembered success. Shutdown preserves the file. It contains
+only a format version, server name and host, with no API token or private key.
+The state path must differ from the YAML and explicitly configured identity files.
 
 ## OpenCode configuration
 

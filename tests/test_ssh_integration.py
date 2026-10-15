@@ -99,7 +99,7 @@ def manager_for(ssh_servers, monkeypatch):
     cfg = Config.model_validate({
         "servers": [{"host": "one"}, {"host": "two"}],
         "proxy": {"ip": "127.0.0.1", "port": free_port()},
-        "http_proxy": {"enabled": False}, "cooldown_seconds": 0,
+        "http_proxy": {"enabled": False}, "state_file": None, "cooldown_seconds": 0,
         "startup_timeout_seconds": 5, "stop_timeout_seconds": 2,
     })
     manager = TunnelManager(cfg)

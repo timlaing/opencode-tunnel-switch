@@ -12,3 +12,6 @@ dist/
 /opencode.jsonc
 
 *.tgz
+
+*.state.json
+/state.json
