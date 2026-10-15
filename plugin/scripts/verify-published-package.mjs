@@ -1,8 +1,8 @@
 import fs from "node:fs";
-import { spawnSync } from "node:child_process";
+import { runNpm } from "./npm-cli.mjs";
 
-const [pack] = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-const result = spawnSync("npm", ["view", `${pack.name}@${pack.version}`, "--json", "--registry=https://npm.pkg.github.com"], { encoding: "utf8" });
+const [pack] = JSON.parse(fs.readFileSync(0, "utf8"));
+const result = runNpm(["view", `${pack.name}@${pack.version}`, "--json", "--registry=https://npm.pkg.github.com"], { encoding: "utf8" });
 if (result.status !== 0) throw new Error("Cannot read back the published package from GitHub Packages");
 const published = JSON.parse(result.stdout);
 if (published.name !== pack.name || published.version !== pack.version || published.dist?.integrity !== pack.integrity)

@@ -40,5 +40,5 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: plugin/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm audit

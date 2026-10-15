@@ -48,7 +48,7 @@ jobs:
           JS
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-      - run: npm ci --prefix plugin
+      - run: npm ci --ignore-scripts --prefix plugin
       - run: npm run check --prefix plugin
       - run: npm test --prefix plugin
       - run: bun --conditions=browser plugin/scripts/verify-tui.ts
@@ -56,7 +56,7 @@ jobs:
         working-directory: plugin
         run: |
           npm pack --json > "$RUNNER_TEMP/plugin-pack.json"
-          bun scripts/verify-package.ts "$RUNNER_TEMP/plugin-pack.json"
+          npm run verify:package < "$RUNNER_TEMP/plugin-pack.json"
       - name: Require a public repository
         run: |
           test "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility')" = public
@@ -70,11 +70,11 @@ jobs:
           test "$(gh api users/timlaing/packages/npm/opencode-tunnel-switch --jq '.visibility')" = public
       - name: Publish the tested archive
         working-directory: plugin
-        run: node scripts/publish-package.mjs "$RUNNER_TEMP/plugin-pack.json"
+        run: npm run publish:package < "$RUNNER_TEMP/plugin-pack.json"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify the published package
         working-directory: plugin
-        run: node scripts/verify-published-package.mjs "$RUNNER_TEMP/plugin-pack.json"
+        run: npm run verify:published < "$RUNNER_TEMP/plugin-pack.json"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

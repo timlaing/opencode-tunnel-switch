@@ -1,12 +1,10 @@
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { runNpm } from "./npm-cli.mjs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Host } from "@opencode/plugin/host";
 
-const manifestPath = process.argv[2];
-if (!manifestPath) throw new Error("Usage: bun scripts/verify-package.ts PACK_JSON_PATH");
-const entries = JSON.parse(readFileSync(manifestPath, "utf8")) as Array<{
+const entries = JSON.parse(readFileSync(0, "utf8")) as Array<{
   name: string; filename: string; files: Array<{ path: string }>;
 }>;
 if (entries.length !== 1 || entries[0].name !== "@timlaing/opencode-tunnel-switch")
@@ -20,7 +18,8 @@ for (const file of files)
     throw new Error(`Unexpected packaged file: ${file}`);
 const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-packed-"));
 try {
-  execFileSync("npm", ["install", "--prefix", directory, "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", path.resolve(pack.filename)], { stdio: "inherit" });
+  const installation = runNpm(["install", "--prefix", directory, "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", path.resolve(pack.filename)], { stdio: "inherit" });
+  if (installation.status !== 0) throw new Error("Packed plugin installation failed");
   const installed = path.join(directory, "node_modules", "@timlaing", "opencode-tunnel-switch");
   const entrypoint = Host.resolve({ directory: installed }).server;
   if (!entrypoint) throw new Error("Packed plugin has no OpenCode server entrypoint");

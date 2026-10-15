@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { runNpm } from "./npm-cli.mjs";
 
-const [pack] = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const [pack] = JSON.parse(fs.readFileSync(0, "utf8"));
 const registry = "https://npm.pkg.github.com";
-const result = spawnSync("npm", ["view", `${pack.name}@${pack.version}`, "dist.integrity", "--json", `--registry=${registry}`], { encoding: "utf8" });
+const result = runNpm(["view", `${pack.name}@${pack.version}`, "dist.integrity", "--json", `--registry=${registry}`], { encoding: "utf8" });
 if (result.status === 0) {
   const integrity = JSON.parse(result.stdout);
   if (integrity !== pack.integrity)
@@ -15,6 +15,6 @@ if (result.status === 0) {
   try { error = JSON.parse(result.stdout).error; } catch {}
   if (error?.code !== "E404")
     throw new Error("Cannot determine whether the package version exists; check registry authentication and connectivity.");
-  const upload = spawnSync("npm", ["publish", path.resolve(pack.filename), `--registry=${registry}`, "--access=restricted"], { stdio: "inherit" });
+  const upload = runNpm(["publish", path.resolve(pack.filename), `--registry=${registry}`, "--access=restricted"], { stdio: "inherit" });
   if (upload.status !== 0) throw new Error("Package upload failed");
 }
