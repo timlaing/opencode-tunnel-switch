@@ -21,6 +21,10 @@ npm run check --prefix plugin
 npm test --prefix plugin
 ```
 
+GitHub CodeQL default setup scans JavaScript/TypeScript and Actions workflows.
+The active ruleset requires its security analysis; keep CodeQL enabled when
+maintaining that rule.
+
 CI runs plugin types, tests and LCOV coverage on Node.js 24. Tests cover API requests, error matching, retry decisions, discovery, environment leases and publishing helpers. Python server, proxy and SSH integration tests belong to the server repository.
 
 To verify the packed plugin with Bun installed, run from `plugin`:
@@ -34,7 +38,7 @@ OpenCode SDK is pinned to `@opencode/plugin` 2.0.29. Local application loading w
 
 ## Releases
 
-Update `CHANGELOG.md`, `plugin/package.json` and its lockfile for a plugin release. Run verification, create a signed `plugin-v<version>` (or `v<version>`) tag on the approved revision, then publish a matching GitHub release. The `Publish plugin` workflow verifies and publishes the packed archive to private GitHub Packages and reads it back for validation. Manual dispatch publishes the version on `main`. Published versions are immutable; confirm the workflow and registry result before announcing availability.
+Update `CHANGELOG.md`, `plugin/package.json` and its lockfile for a plugin release. Run verification, create a signed `plugin-v<version>` (or `v<version>`) tag on the approved revision, then publish a matching GitHub release. The `Publish plugin` workflow verifies and publishes the packed archive to public GitHub Packages and reads it back for validation. Manual dispatch publishes the version on `main`. Published versions are immutable; confirm the workflow and registry result before announcing availability.
 
 Python distributions and server releases are managed in `ssh-tunnel-switch`. This repository no longer builds combined install bundles. See the [package guide](plugin/README.md) for authentication and publication details.
 
@@ -64,10 +68,10 @@ the plugin CI job passing against an up-to-date branch, linear history, no
 force pushes or deletion, and no bypass actors. Review requires a second
 person; PR authors cannot approve their own changes.
 
-GitHub currently rejects protection for this private repository because its
-owner's plan does not support it. The JSON file is a configuration artifact,
-not active protection. Once GitHub Pro is available, an administrator can
-import it under Settings → Rules → Rulesets, or apply it with:
+The public repository has an active `main` ruleset. The JSON file describes the
+intended policy; inspect Settings → Rules → Rulesets for the currently enforced
+checks and reviews. Keep required check names synchronized with CI when jobs are
+renamed or removed. An administrator can apply the intended policy with:
 
 ```sh
 gh api --method POST repos/timlaing/opencode-tunnel-switch/rulesets \
@@ -84,4 +88,6 @@ The `SonarQube` workflow follows successful `CI` runs for main pushes and same-r
 
 Project: `timlaing_opencode-tunnel-switch`, organization: `timlaing`, service: `https://sonarcloud.io`. Enable GitHub variable `SONAR_ENABLED=true` and supply Actions secret `SONAR_TOKEN` only after the Sonar project exists with matching visibility. Disable Sonar automatic analysis when using this CI workflow. A missing credential fails an enabled scan; disabled scanning is explicitly skipped.
 
-Private scanning is prepared but disabled: the current Sonar organization does not support private projects. Enable private-project support, import this repository as a **private** Sonar project, add its CI token and set `SONAR_ENABLED=true` to activate. Do not upload this repository to a public Sonar project.
+For this public repository, create or import a public Sonar project with the key
+above, configure its CI token, and set `SONAR_ENABLED=true` to activate scanning.
+Repository visibility alone does not create or enable a Sonar project.

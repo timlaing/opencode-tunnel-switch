@@ -2,17 +2,14 @@
 
 ## Reporting a vulnerability
 
-This repository is private. Authorized collaborators should open a sanitized
-issue with the `security` and `keep-open` labels and alert the maintainer through
-their existing private contact channel. Issues are visible to repository
-collaborators, so do not include credentials, private keys, personal data or
-sensitive deployment details. Agree on a private method before sending sensitive
-reproduction material. Do not post vulnerability details to a public issue in
-another repository.
+This repository and its issues are public. Do not put vulnerability details,
+credentials, private keys, personal data or sensitive deployment information in
+public issues, pull requests or discussions.
 
-GitHub's security advisories and private vulnerability reporting are currently
-[available for public repositories](https://docs.github.com/en/code-security/concepts/vulnerability-reporting-and-management/repository-security-advisories);
-this private repository does not advertise an unavailable reporting endpoint.
+Report vulnerabilities privately through [GitHub private vulnerability reporting](https://github.com/timlaing/opencode-tunnel-switch/security/advisories/new).
+This route is available to first-time reporters and sends the report privately to
+repository maintainers. Do not use a public issue as a substitute.
+
 No response-time guarantee or older-release support commitment is offered.
 Security fixes target the current development branch and the latest releases;
 upgrade both components when a fix affects their interaction.

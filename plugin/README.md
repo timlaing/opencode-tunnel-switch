@@ -6,9 +6,9 @@ The external [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch) 
 
 After a successful tunnel switch, the plugin requests that OpenCode retry the current model request after one second, continuing the existing work automatically. Status display runs independently so a slow or failed notification cannot delay continuation. If a switch returns 429 (for example, another switch is already in progress), only the current work request is retried after `Retry-After`; the switch is not retried in that retry sequence. A local cooldown similarly delays the work request until it expires. Other switch failures stop the retry, and OpenCode's retry limit still applies.
 
-## Install from private GitHub Packages
+## Install from public GitHub Packages
 
-Authenticate with a GitHub personal access token (classic) with `read:packages` and permission to this private package:
+The package is distributed through GitHub Packages. Public npm packages on this registry still require authentication, as documented by [GitHub](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages). Use a GitHub personal access token (classic) with `read:packages`:
 
 ```sh
 npm login --scope=@timlaing --auth-type=legacy --registry=https://npm.pkg.github.com
@@ -46,4 +46,4 @@ The repository's `Publish plugin` workflow runs plugin types and tests, checks t
 
 Publishing runs when a GitHub release is published, or manually on `main`. A release tag must be `v<package-version>` or `plugin-v<package-version>`, matching `package.json`. Update the manifest and lockfile version before releasing a new version. Published versions cannot be overwritten.
 
-Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no publishing PAT or repository secret is required. The package is linked to the private repository, and publishing uses restricted access after checking that the repository is private. The workflow reads the published version back from the npm registry and verifies its archive integrity and repository link. The `private: true` npm flag is omitted because it would prohibit all publication, including private GitHub Packages.
+Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no publishing PAT or repository secret is required. The package is linked to the public repository. The manifest requests public access; the workflow checks that both the repository and existing GitHub package are public before publishing. GitHub package visibility is a separate setting: maintainers manage it under [package settings](https://github.com/users/timlaing/packages/npm/opencode-tunnel-switch/settings), rather than relying on npm access flags. The workflow reads the published version back from the npm registry and verifies its archive integrity and repository link. Do not set the npm `private: true` flag, which prohibits publication.
