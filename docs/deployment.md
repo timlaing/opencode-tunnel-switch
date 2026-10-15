@@ -78,7 +78,7 @@ State defaults to `/var/lib/tunnel-switch/.config/opencode-tunnel-switch/state.j
 for this account, within the unit's writable home directory. For another location,
 set `state_file` in YAML or override `ExecStart` with `--state-file`; the directory
 must be writable by this account and permitted by `ReadWritePaths`. Use
-`--server-index` only to deliberately override the remembered startup selection.
+`--server-name` only to deliberately override the remembered startup selection.
 
 ## Start and verify
 

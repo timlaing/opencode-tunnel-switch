@@ -30,17 +30,17 @@ def serve(
     config: ConfigOption,
     state_file: Annotated[Path | None, typer.Option(
         "--state-file", help="Override the last-connected-server state file (relative paths use the current directory).")] = None,
-    server_index: Annotated[int | None, typer.Option(
-        "--server-index", min=0, help="Start at this zero-based server index instead of the saved server.")] = None,
+    server_name: Annotated[str | None, typer.Option(
+        "--server-name", help="Start at this configured server name instead of the saved server.")] = None,
 ):
     """Start the API and manage one SSH process; Ctrl-C stops the tunnel."""
     cfg = load_config(config)
     if state_file is not None:
         cfg.state_file = resolve_state_file(state_file, cfg, config)
-    if server_index is not None:
-        if server_index >= len(cfg.servers):
-            raise ValueError(f"Server index must be between 0 and {len(cfg.servers) - 1}")
-        cfg.server_index = server_index
+    if server_name is not None:
+        if server_name not in {server.name for server in cfg.servers}:
+            raise ValueError(f"Unknown server name: {server_name}. Choose one of: {', '.join(server.name for server in cfg.servers)}")
+        cfg.server_name = server_name
     token = ensure_api_token(config, cfg)
     typer.echo(f"API token: {token}")
     if cfg.state_file is not None:

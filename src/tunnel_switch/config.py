@@ -62,12 +62,12 @@ class Config(StrictModel):
     stop_timeout_seconds: float = Field(default=5, gt=0, le=60)
     start_on_launch: bool = True
     state_file: Path | None = Field(default_factory=lambda: Path("~/.config/opencode-tunnel-switch/state.json").expanduser())
-    server_index: int | None = Field(default=None, ge=0)
+    server_name: str | None = None
 
     @model_validator(mode="after")
     def unique_names(self):
-        if self.server_index is not None and self.server_index >= len(self.servers):
-            raise ValueError("server_index must select an existing server (zero-based)")
+        if self.server_name is not None and self.server_name not in {server.name for server in self.servers}:
+            raise ValueError("server_name must match a configured server name")
         if len({server.name for server in self.servers}) != len(self.servers):
             raise ValueError("SSH server names must be unique")
         listeners = [self.proxy, self.api]

@@ -7,7 +7,7 @@ tags and npm publication describe the plugin unless explicitly stated otherwise.
 
 - Remember the last successful SSH server across restarts in an atomic state file,
   defaulting to ~/.config/opencode-tunnel-switch/state.json.
-- Add YAML state_file/server_index options and CLI --state-file/--server-index overrides.
+- Add YAML state_file/server_name options and CLI --state-file/--server-name overrides.
 
 - Include the plugin lockfile in release bundles and install locked production
   dependencies with npm ci; validate that installation in release CI.

@@ -30,5 +30,5 @@ start_on_launch: true
 # Defaults to this file under the service account's home directory.
 # Set null to disable persistence; relative paths are resolved beside this YAML.
 state_file: ~/.config/opencode-tunnel-switch/state.json
-# Optional zero-based starting server; null resumes the saved server.
-server_index: null
+# Optional starting server name; null resumes the saved server.
+server_name: null

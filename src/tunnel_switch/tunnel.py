@@ -25,7 +25,8 @@ class TunnelManager:
         self.started_at = None
         self.server_name = None
         self.last_error = None
-        remembered = config.server_index
+        remembered = next((index for index, server in enumerate(config.servers)
+                           if server.name == config.server_name), None)
         if remembered is None and config.state_file is not None:
             remembered = load_last_server(config.state_file, config.servers)
         # rotate() advances before connecting: the first connection after restart

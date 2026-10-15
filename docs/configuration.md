@@ -21,7 +21,7 @@ Edit `config.yaml` with your SSH host aliases and the SOCKS, HTTP proxy and API 
 | `stop_timeout_seconds` | `5` | Wait before forcibly killing an SSH process, greater than zero and at most 60 seconds |
 | `start_on_launch` | `true` | Start the saved SSH server (or the first server without saved state) when the API starts |
 | `state_file` | `~/.config/opencode-tunnel-switch/state.json` | Last successfully connected server; `null` disables persistence |
-| `server_index` | `null` | Optional zero-based starting server, overriding saved state |
+| `server_name` | `null` | Optional starting server name, overriding saved state |
 
 A host-only server list can use existing SSH config aliases:
 
@@ -59,25 +59,25 @@ Configure a different file in YAML or override it for a single run:
 
 ```yaml
 state_file: ~/.config/opencode-tunnel-switch/state.json
-server_index: null
+server_name: null
 ```
 
 ```sh
 .venv/bin/tunnel-switch serve --config config.yaml --state-file /path/to/state.json
-.venv/bin/tunnel-switch serve --config config.yaml --server-index 1
+.venv/bin/tunnel-switch serve --config config.yaml --server-name two
 ```
 
-`--server-index` is zero-based: `1` starts the second server. It takes precedence
-over YAML `server_index` and saved state for the first connection, including the
+`--server-name` selects a server by its configured `name`. It takes precedence
+over YAML `server_name` and saved state for the first connection, including the
 first manual rotation when `start_on_launch` is false. A successful connection
 updates the file even when selected explicitly. Later rotations advance normally.
-Out-of-range indexes are rejected. YAML state paths are relative to the YAML
+Unknown server names are rejected. YAML state paths are relative to the YAML
 file; relative CLI state paths use the current working directory. `~` expands
 for the service account. Use a separate state file for each service instance.
 
 Missing files, or saved servers removed/renamed in YAML, start at the first server.
 Malformed, unsupported-version or unreadable state files cause startup to fail
-with an error; move the file aside or explicitly select `--server-index` to
+with an error; move the file aside or explicitly select `--server-name` to
 replace invalid contents on the next successful connection. Set `state_file: null`
 in YAML to opt out. `--state-file` overrides that opt-out.
 

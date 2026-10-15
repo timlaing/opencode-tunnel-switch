@@ -388,10 +388,10 @@ def test_invalid_state_fails_without_overwriting(tmp_path, contents):
     assert path.read_text() == contents
 
 
-async def test_server_index_overrides_saved_selection(manager, tmp_path, monkeypatch):
+async def test_server_name_overrides_saved_selection(manager, tmp_path, monkeypatch):
     path = tmp_path / "state.json"
     path.write_text("invalid state deliberately overridden")
-    resumed = ready_manager(config(state_file=path, server_index=1), monkeypatch)
+    resumed = ready_manager(config(state_file=path, server_name="two"), monkeypatch)
     try:
         assert (await resumed.rotate())["server"] == "two"
         assert json.loads(path.read_text())["server"] == "two"
@@ -414,7 +414,7 @@ def test_state_paths_and_default_directory(tmp_path):
         load_config(path)
 
 
-def test_state_cli_options_and_invalid_index(tmp_path, monkeypatch):
+def test_state_cli_options_and_invalid_name(tmp_path, monkeypatch):
     from click import unstyle
 
     path = tmp_path / "config.yaml"
@@ -423,18 +423,18 @@ def test_state_cli_options_and_invalid_index(tmp_path, monkeypatch):
     monkeypatch.setattr("tunnel_switch.cli.create_app", lambda cfg, token: captured.append(cfg) or object())
     monkeypatch.setattr("tunnel_switch.cli.uvicorn.run", lambda *args, **kwargs: None)
     runner = CliRunner()
-    result = runner.invoke(app, ["serve", "--config", str(path), "--state-file", str(tmp_path / "cli.json"), "--server-index", "1"])
+    result = runner.invoke(app, ["serve", "--config", str(path), "--state-file", str(tmp_path / "cli.json"), "--server-name", "two"])
     assert result.exit_code == 0, result.output
     assert captured[0].state_file == tmp_path / "cli.json"
-    assert captured[0].server_index == 1
+    assert captured[0].server_name == "two"
     assert str(tmp_path / "cli.json") in result.output
     captured.clear()
-    assert runner.invoke(app, ["serve", "--config", str(path), "--server-index", "2"]).exit_code != 0
+    assert runner.invoke(app, ["serve", "--config", str(path), "--server-name", "missing"]).exit_code != 0
     assert not captured
     help_text = unstyle(runner.invoke(app, ["serve", "--help"]).output)
-    assert "--state-file" in help_text and "--server-index" in help_text
-    with pytest.raises(ValidationError, match="server_index"):
-        config(server_index=2)
+    assert "--state-file" in help_text and "--server-name" in help_text
+    with pytest.raises(ValidationError, match="server_name"):
+        config(server_name="missing")
 
 
 async def test_cancelled_state_save_finishes_before_next_rotation(manager, tmp_path, monkeypatch):
