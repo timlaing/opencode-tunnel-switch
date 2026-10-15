@@ -43,8 +43,8 @@ jobs:
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           if (pkg.name !== '@timlaing/opencode-tunnel-switch' || pkg.private === true || pkg.publishConfig.registry !== 'https://npm.pkg.github.com' || pkg.publishConfig.access !== 'public')
             throw new Error('Unexpected package publishing configuration');
-          if (process.env.GITHUB_EVENT_NAME === 'release' && ![`v${pkg.version}`, `plugin-v${pkg.version}`].includes(process.env.RELEASE_TAG))
-            throw new Error('Release tag must match the plugin package version');
+          if (process.env.GITHUB_EVENT_NAME === 'release' && process.env.RELEASE_TAG !== `v${pkg.version}`)
+            throw new Error('Release tag must be v<version> matching the package version');
           JS
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
