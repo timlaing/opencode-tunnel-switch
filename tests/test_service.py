@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from unittest.mock import AsyncMock
 import httpx
 import pytest
@@ -492,3 +493,45 @@ def test_cli_config_discovery(tmp_path, monkeypatch):
     preferred.unlink()
     local.unlink()
     assert CliRunner().invoke(app, ["validate"]).exit_code != 0
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory fsync")
+def test_state_syncs_directory_after_replace(tmp_path, monkeypatch):
+    import os
+    import stat
+    from tunnel_switch.state import save_last_server
+
+    events = []
+    fsync, replace = os.fsync, os.replace
+    def sync(fd):
+        events.append("directory" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file")
+        fsync(fd)
+    def rename(source, target):
+        events.append("replace")
+        replace(source, target)
+    monkeypatch.setattr("tunnel_switch.state.os.fsync", sync)
+    monkeypatch.setattr("tunnel_switch.state.os.replace", rename)
+    save_last_server(tmp_path / "state.json", config().servers[0])
+    assert events == ["file", "replace", "directory"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory fsync")
+def test_state_directory_sync_failure_closes_handle(tmp_path, monkeypatch):
+    import os
+    import stat
+    from tunnel_switch.state import save_last_server
+
+    fsync = os.fsync
+    directories = []
+    def sync(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            directories.append(fd)
+            raise OSError("directory sync failed")
+        fsync(fd)
+    monkeypatch.setattr("tunnel_switch.state.os.fsync", sync)
+    with pytest.raises(OSError, match="directory sync failed"):
+        save_last_server(tmp_path / "state.json", config().servers[0])
+    assert len(directories) == 1
+    with pytest.raises(OSError):
+        os.fstat(directories[0])
+    assert [p.name for p in tmp_path.iterdir()] == ["state.json"]

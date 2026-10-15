@@ -43,6 +43,14 @@ def save_last_server(path: Path, server: Server):
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
+        # Persist the renamed directory entry as well as the file contents.
+        # Windows does not support opening directory handles with os.open.
+        if os.name != "nt":
+            directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
