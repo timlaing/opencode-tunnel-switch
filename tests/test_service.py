@@ -415,6 +415,8 @@ def test_state_paths_and_default_directory(tmp_path):
 
 
 def test_state_cli_options_and_invalid_index(tmp_path, monkeypatch):
+    from click import unstyle
+
     path = tmp_path / "config.yaml"
     path.write_text(json.dumps(config().model_dump(mode="json")))
     captured = []
@@ -429,7 +431,7 @@ def test_state_cli_options_and_invalid_index(tmp_path, monkeypatch):
     captured.clear()
     assert runner.invoke(app, ["serve", "--config", str(path), "--server-index", "2"]).exit_code != 0
     assert not captured
-    help_text = runner.invoke(app, ["serve", "--help"]).output
+    help_text = unstyle(runner.invoke(app, ["serve", "--help"]).output)
     assert "--state-file" in help_text and "--server-index" in help_text
     with pytest.raises(ValidationError, match="server_index"):
         config(server_index=2)
