@@ -64,3 +64,17 @@ for (const header of [undefined, "invalid", "0", "2"] as const) {
       && error.retryAfterMs === (header === "2" ? 2000 : header === "0" ? 1000 : 5000));
   });
 }
+
+for (const [header, expected] of [
+  ["Thu, 15 Oct 2026 12:00:10 GMT", 10000],
+  ["Thu, 15 Oct 2026 11:59:00 GMT", 1000],
+  ["1.5", 1500],
+] as const) {
+  test(`429 delay preserves HTTP date and fractional seconds: ${header}`, async (t) => {
+    t.mock.method(Date, "now", () => Date.parse("2026-10-15T12:00:00Z"));
+    const client = makeClient(Options.parse({ apiToken: "test-token" }), "test-token", () =>
+      Promise.resolve(new Response("busy", { status: 429, headers: { "Retry-After": header } })));
+    await assert.rejects(client.rotate(), (error: unknown) => error instanceof RotationRateLimit
+      && error.retryAfterMs === expected);
+  });
+}

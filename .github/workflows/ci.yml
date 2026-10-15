@@ -30,7 +30,7 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: plugin/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:

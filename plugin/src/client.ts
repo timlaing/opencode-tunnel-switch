@@ -11,7 +11,7 @@ export const Options = z.object({
   noProxy: z.array(z.string().min(1)).default([]),
   providers: z.array(z.string().min(1)).min(1).default(["opencode"]),
   patterns: z.array(z.string().min(1)).min(1).default([
-    "FreeUsageLimitError", "free usage exceeded", "rate limit exceeded\\. please try again later",
+    "FreeUsageLimitError", "free usage exceeded", String.raw`rate limit exceeded\. please try again later`,
   ]),
   timeoutMs: z.number().int().positive().default(25000),
   cooldownMs: z.number().int().nonnegative().default(30000),
@@ -34,6 +34,14 @@ export function detector(options: OptionsType) {
     && patterns.some((pattern) => pattern.test(`${error.type}: ${error.message}`));
 }
 
+/** Parse Retry-After as seconds or an HTTP date, retaining a bounded fallback. */
+function retryDelay(header: string | null, cooldownMs: number): number {
+  if (header === null) return Math.max(1000, cooldownMs);
+  const seconds = /^\d+(?:\.\d+)?$/.test(header.trim()) ? Number(header) : Number.NaN;
+  const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - Date.now();
+  return Number.isFinite(delay) ? Math.max(1000, delay) : Math.max(1000, cooldownMs);
+}
+
 /** Create an authenticated control client with shared rotation requests and cooldowns. */
 export function makeClient(options: OptionsType, token: string, fetcher: typeof fetch = fetch) {
   const host = options.apiIp.includes(":") ? `[${options.apiIp}]` : options.apiIp;
@@ -52,11 +60,7 @@ export function makeClient(options: OptionsType, token: string, fetcher: typeof 
     if (!response.ok) {
       const message = `Tunnel API ${response.status}: ${await response.text()}`;
       if (response.status === 429) {
-        const header = response.headers.get("Retry-After");
-        const seconds = header !== null && /^\d+(?:\.\d+)?$/.test(header.trim()) ? Number(header) : NaN;
-        const deadline = header === null ? NaN : Date.parse(header);
-        const delay = Number.isFinite(seconds) ? seconds * 1000 : deadline - Date.now();
-        throw new RotationRateLimit(message, Number.isFinite(delay) ? Math.max(1000, delay) : Math.max(1000, options.cooldownMs));
+        throw new RotationRateLimit(message, retryDelay(response.headers.get("Retry-After"), options.cooldownMs));
       }
       throw new Error(message);
     }

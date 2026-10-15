@@ -5,6 +5,10 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+- Simplify retry-delay parsing without changing Retry-After handling.
+- Disable dependency lifecycle scripts in CI and publishing installs. Read pack
+  metadata from stdin and invoke npm through its parent-provided absolute CLI path.
+
 - Override the Solid serializer dependency to patched Seroval `^1.6.9` and
   document the root-install override requirement.
 
