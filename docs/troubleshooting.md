@@ -1,5 +1,7 @@
 # Troubleshooting
 
+See the [configuration guide](configuration.md) for YAML fields, plugin options and API behavior.
+
 Check the Python service first, then SSH/proxy connectivity, then plugin loading.
 Keep tokens, private addresses, SSH configuration and unrelated credentials out
 of reports. The startup console and systemd journal contain the API token.

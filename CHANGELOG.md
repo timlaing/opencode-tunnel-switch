@@ -5,6 +5,23 @@ tags and npm publication describe the plugin unless explicitly stated otherwise.
 
 ## Unreleased
 
+- Include the plugin lockfile in release bundles and install locked production
+  dependencies with npm ci; validate that installation in release CI.
+- Disable shared Node/Bun caches in the release packaging workflow.
+
+- Verification commands, CI coverage and demonstrated runtime evidence centralized
+  in CONTRIBUTING.md; compatibility guide retains runtime requirements.
+
+- Detailed service/plugin configuration and API reference moved to docs/configuration.md;
+  README retains a minimal local setup example.
+
+- Release-bundle installation, with development instructions in CONTRIBUTING.md.
+- GitHub release asset packaging and fresh-wheel installation verification.
+
+- Real OpenSSH integration tests with disposable Docker servers: forwarding,
+  rotation, strict host-key rejection, server loss, recovery and cleanup; enabled
+  in Linux CI and available locally by explicit opt-in.
+
 - MIT license in the repository and both distribution formats; plugin 0.1.2 is
   prepared but not yet published.
 - Automatic issue/PR labels, stale handling and contribution guidance.
