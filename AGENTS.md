@@ -22,7 +22,7 @@ Quick reference for AI agents. Human-facing workflow, rationale and history live
 
 - Commits are GPG-signed automatically (`commit.gpgsign=true` with a configured key); check `git log -1 --show-signature` before pushing. Never commit `.npmrc`, tokens, `*.tgz`, or live config.
 - PR titles use conventional prefixes (`fix:`, `feat:`, `docs:`, `ci:`, `test:`, `build:`); the label workflow derives labels from them plus changed paths.
-- Changelog: working entries go under `## Unreleased` in CHANGELOG.md; releases get `## Plugin <version> — <date>` sections. If a past release section is missing, backfill it instead of folding old entries into the new release.
+- Changelog: working entries go under `## Unreleased` in CHANGELOG.md; release headings follow `## [<version>] - <YYYY-MM-DD>` (e.g. `## [1.2.0] - 2026-10-15`). If a past release section is missing, backfill it instead of folding old entries into the new release.
 - Release: bump `plugin/package.json` and the lockfile (`npm install --package-lock-only --ignore-scripts` in `plugin/`), update the changelog, merge, then tag the merge commit `v<version>` and publish a GitHub release to trigger the Publish plugin workflow. The workflow accepts only exact `v<version>` tags (manual dispatches are exempt); published versions are immutable.
 - Keep the `overrides: { "seroval": "^1.6.9" }` in `plugin/package.json` until OpenTUI's Solid constraint resolves a patched serializer; dropping it reintroduces the vulnerable `~1.5.x`. Verify override changes with `npm audit` plus the TUI check.
 
