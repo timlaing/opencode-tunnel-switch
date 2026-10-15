@@ -9,6 +9,7 @@ of reports. The startup console and systemd journal contain the API token.
 | Symptom | Check and corrective action |
 | --- | --- |
 | Configuration validation fails | Run `tunnel-switch validate --config /path/to/config.yaml`; YAML is mandatory, unknown fields are rejected, and configured identity files must exist. Read the printed CLI help. |
+| Startup reports an invalid state file | Check the selected `state_file` and service account. Move malformed state aside or use `--server-index` to select a server explicitly. Successful startup replaces the state; see [restart state](configuration.md#restart-state-and-startup-selection). |
 | Token cannot be generated/saved | Check ownership and directory permissions. Atomic replacement requires a writable parent directory, not just a writable file. Under systemd use `/etc/tunnel-switch`. |
 | REST returns 401 | Compare YAML `api.token` with the plugin's `apiToken` privately; restart/reload after token changes. GitHub package tokens are unrelated. |
 | REST returns 429 | Read `Retry-After`; another rotation is underway or the cooldown is active. Wait before requesting again. Startup and failed rotations also initiate cooldown. |
