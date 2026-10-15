@@ -3,7 +3,7 @@
 The Python service and OpenCode plugin have independent versions. GitHub release
 tags and npm publication describe the plugin unless explicitly stated otherwise.
 
-## Unreleased
+## Plugin 1.0.0 / Python service 1.0.0 — 2026-10-15
 
 - Remember the last successful SSH server across restarts in an atomic state file,
   defaulting to ~/.config/opencode-tunnel-switch/state.json.
@@ -29,8 +29,7 @@ tags and npm publication describe the plugin unless explicitly stated otherwise.
   rotation, strict host-key rejection, server loss, recovery and cleanup; enabled
   in Linux CI and available locally by explicit opt-in.
 
-- MIT license in the repository and both distribution formats; plugin 0.1.2 is
-  prepared but not yet published.
+- MIT license in the repository and both distribution formats.
 - Automatic issue/PR labels, stale handling and contribution guidance.
 - Main-branch ruleset prepared; enforcement is blocked by the private repository's
   current GitHub plan.

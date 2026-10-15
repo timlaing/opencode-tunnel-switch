@@ -27,7 +27,7 @@ Keep registry credentials in your npm user configuration, not the repository. Co
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
     [
-      "@timlaing/opencode-tunnel-switch@0.1.2",
+      "@timlaing/opencode-tunnel-switch@1.0.0",
       {
         "apiIp": "127.0.0.1",
         "apiPort": 8765,

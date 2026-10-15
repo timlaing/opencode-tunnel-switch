@@ -16,7 +16,6 @@ OpenCode v1 configuration and plugin APIs are unsupported. v2 uses singular
 `plugin` and `[package, options]` entries. HTTP/1.1 forwarding and HTTPS CONNECT
 are tested; native WebSocket proxy behavior and HTTP Upgrade are not guaranteed.
 
-Plugin and Python versions are independent. The Python service remains 0.1.0;
-plugin 0.1.1 is published, while 0.1.2 contains MIT licensing changes awaiting
-publication. See the [changelog](../CHANGELOG.md) and package registry before
+Plugin and Python versions are independent. The 1.0.0 release versions both
+components as 1.0.0. See the [changelog](../CHANGELOG.md) and package registry before
 selecting an installation version.
