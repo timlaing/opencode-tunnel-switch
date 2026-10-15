@@ -15,6 +15,7 @@ of reports. The startup console and systemd journal contain the API token.
 | REST returns 429 | Read `Retry-After`; another rotation is underway or the cooldown is active. Wait before requesting again. Startup and failed rotations also initiate cooldown. |
 | REST returns 503 or status says disconnected | Check host aliases, authentication, verified known hosts and SSH TCP-forwarding permission as the account running the service. |
 | SOCKS address occupied | Stop the duplicate service or select a free socket. The service does not terminate unrelated processes. |
+| Streaming response resets around 120 seconds | Earlier proxy versions timed out each CONNECT direction separately, closing active responses when the client was quiet. Upgrade to a version with the shared tunnel inactivity fix. A truly idle tunnel can still close after `http_proxy.idle_timeout_seconds`; SSH loss and rotations also close active connections. |
 | HTTP proxy returns 502 | Check the SSH connection and destination reachability; SOCKS failure has no direct fallback. |
 | HTTP proxy returns 503 | The connection admission limit is reached. Inspect long-lived connections and configured limits. |
 | HTTP proxy returns 400 | Check request framing. Use a normal HTTP proxy client; HTTP Upgrade is unsupported. |

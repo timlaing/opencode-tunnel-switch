@@ -9,6 +9,8 @@ tags and npm publication describe the plugin unless explicitly stated otherwise.
   defaulting to ~/.config/opencode-tunnel-switch/state.json.
 - Discover CLI configuration in ~/.config/opencode-tunnel-switch/config.yaml, falling back to ./config.yaml.
 - Add YAML state_file/server_name options and CLI --state-file/--server-name overrides.
+- Fix HTTPS CONNECT streams closing at the idle timeout despite ongoing response
+  or upload traffic; measure inactivity across both directions of the tunnel.
 
 - Include the plugin lockfile in release bundles and install locked production
   dependencies with npm ci; validate that installation in release CI.
