@@ -188,7 +188,7 @@ paths, so they are not required checks in the ruleset.
 
 ## SonarQube analysis
 
-The `SonarQube` workflow follows successful `CI` runs for main pushes and pull requests. CI uploads Python branch coverage and plugin LCOV coverage; the scan downloads artifacts from that exact run and waits for the quality gate. It uses trusted workflow arguments, removes PR-controlled scanner properties, and does not execute repository code with the Sonar credential. `sonar-project.properties` documents the same source/test layout for local analysis.
+The `SonarQube` workflow follows successful `CI` runs for main pushes and same-repository pull requests. Fork PRs still run unprivileged CI but do not receive credentialed scans; maintainers can move reviewed changes onto a branch in this repository to obtain a scan. CI uploads Python branch coverage and plugin LCOV coverage; the scan downloads artifacts from that exact run and waits for the quality gate. It uses trusted workflow arguments, removes PR-controlled scanner properties, and does not execute repository code with the Sonar credential. `sonar-project.properties` documents the same source/test layout for local analysis.
 
 Project: `timlaing_opencode-tunnel-switch`, organization: `timlaing`, service: `https://sonarcloud.io`. Enable GitHub variable `SONAR_ENABLED=true` and supply Actions secret `SONAR_TOKEN` only after the Sonar project exists with matching visibility. Disable Sonar automatic analysis when using this CI workflow. A missing credential fails an enabled scan; disabled scanning is explicitly skipped.
 
