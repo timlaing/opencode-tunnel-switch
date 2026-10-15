@@ -185,3 +185,11 @@ gh api --method POST repos/timlaing/opencode-tunnel-switch/rulesets \
 Squash/rebase merging and automatic deletion of merged branches are enabled
 in repository settings. Dependency-audit checks are conditional on changed
 paths, so they are not required checks in the ruleset.
+
+## SonarQube analysis
+
+The `SonarQube` workflow follows successful `CI` runs for main pushes and pull requests. CI uploads Python branch coverage and plugin LCOV coverage; the scan downloads artifacts from that exact run and waits for the quality gate. It uses trusted workflow arguments, removes PR-controlled scanner properties, and does not execute repository code with the Sonar credential. `sonar-project.properties` documents the same source/test layout for local analysis.
+
+Project: `timlaing_opencode-tunnel-switch`, organization: `timlaing`, service: `https://sonarcloud.io`. Enable GitHub variable `SONAR_ENABLED=true` and supply Actions secret `SONAR_TOKEN` only after the Sonar project exists with matching visibility. Disable Sonar automatic analysis when using this CI workflow. A missing credential fails an enabled scan; disabled scanning is explicitly skipped.
+
+Private scanning is prepared but disabled: the current Sonar organization does not support private projects. Enable private-project support, import this repository as a **private** Sonar project, add its CI token and set `SONAR_ENABLED=true` to activate. Do not upload this repository to a public Sonar project.
