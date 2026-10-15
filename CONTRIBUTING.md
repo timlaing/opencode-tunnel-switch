@@ -37,6 +37,11 @@ bun scripts/verify-package.ts /tmp/tunnel-switch-plugin-pack.json
 
 OpenCode SDK is pinned to `@opencode/plugin` 2.0.29. Local application loading was previously verified with OpenCode v2.0.25; CI does not launch the full application. See [troubleshooting](docs/troubleshooting.md) for discovery checks.
 
+The plugin manifest overrides Seroval to `^1.6.9` because OpenTUI's required
+Solid version otherwise resolves a vulnerable `~1.5.x` serializer. Keep this
+override until the upstream dependency constraint includes a patched version;
+verify changes with `npm audit` and the TUI renderer check.
+
 ## Releases
 
 Update `CHANGELOG.md`, `plugin/package.json` and its lockfile for a plugin release. Run verification, create a signed `plugin-v<version>` (or `v<version>`) tag on the approved revision, then publish a matching GitHub release. The `Publish plugin` workflow verifies and publishes the packed archive to public GitHub Packages and reads it back for validation. Manual dispatch publishes the version on `main`. Published versions are immutable; confirm the workflow and registry result before announcing availability.

@@ -47,6 +47,15 @@ Keep registry credentials in your npm user configuration, not the repository. Co
 
 The REST token is separate from GitHub registry credentials. Proxy IP/port are discovered automatically from `/status`. OpenCode's Bun runtime loads the shipped TypeScript root `index.ts`; no consumer build step is required. Local development can still configure the absolute `plugin` directory instead of the package name.
 
+## Serializer dependency
+
+OpenTUI currently requires a Solid version that constrains Seroval to a vulnerable
+release range. This checkout overrides Seroval to `^1.6.9` and audits that resolved
+tree. npm applies overrides only from the installing root project: applications
+installing this package must also enforce a patched Seroval version in their root
+dependency configuration. This package's override does not patch OpenCode's own
+bundled dependencies.
+
 ## Publishing
 
 The repository's `Publish plugin` workflow runs plugin types and tests, checks the package allowlist, installs the packed tarball and verifies its OpenCode entrypoint before publishing that exact archive to `https://npm.pkg.github.com`.

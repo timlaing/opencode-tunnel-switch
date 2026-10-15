@@ -5,6 +5,9 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+- Override the Solid serializer dependency to patched Seroval `^1.6.9` and
+  document the root-install override requirement.
+
 - Add a live Tunnel section to the OpenCode sidebar with connection details,
   API availability, stale-data handling and `/tunnel-refresh`.
 
