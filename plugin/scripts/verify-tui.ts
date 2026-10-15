@@ -3,19 +3,23 @@ import { testRender } from "@opentui/solid";
 import type { Context, SlotClaim, KeymapLayer } from "@opencode/plugin/tui/context";
 import plugin from "../src/tui.js";
 const originalFetch = globalThis.fetch;
+const originalNow = Date.now;
+let now = Date.parse("2026-10-15T11:00:00Z");
+Date.now = () => now;
 let claim: SlotClaim | undefined;
 let layer: KeymapLayer | undefined;
 let fail = false;
 let id = "example-connection";
 let removed = false;
 const calls: string[] = [];
-globalThis.fetch = (async (url, init) => {
-  calls.push(`${init?.method} ${new URL(String(url)).pathname}`);
+globalThis.fetch = ((url, init) => {
+  const address = url instanceof Request ? url.url : url;
+  calls.push(`${init?.method} ${new URL(address).pathname}`);
   assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer test-token");
-  if (fail) throw new Error("private-error-must-not-render");
-  return new Response(JSON.stringify({ state: "connected", connection_id: id,
+  if (fail) return Promise.reject(new Error("private-error-must-not-render"));
+  return Promise.resolve(new Response(JSON.stringify({ state: "connected", connection_id: id,
     started_at: "2026-10-15T10:00:00Z", server: "example-server",
-    http_proxy: { enabled: true, ip: "127.0.0.1", port: 9988 } }));
+    http_proxy: { enabled: true, ip: "127.0.0.1", port: 9988 } })));
 }) as typeof fetch;
 const cleanup = await plugin.setup({
   options: { apiToken: "test-token" },
@@ -36,19 +40,23 @@ try {
   id = "rotated-connection";
   await refresh(); await view.renderOnce();
   assert.match(view.captureCharFrame(), /rotated-connection/);
+  now += 60000;
   fail = true;
   await refresh(); await view.renderOnce();
   frame = view.captureCharFrame();
   assert.match(frame, /API unavailable/);
   assert.match(frame, /last known/);
+  assert.match(frame, /Uptime: 1h 0m 0s/);
+  assert.match(frame, /successful\s+check/);
   assert.doesNotMatch(frame, /private-error|test-token/);
   fail = false;
   await refresh(); await view.renderOnce();
   assert.match(view.captureCharFrame(), /API reachable/);
+  assert.match(view.captureCharFrame(), /Uptime: 1h 1m 0s/);
   assert.ok(calls.every(call => call === "GET /status"));
   console.log(view.captureCharFrame());
   console.log("TUI rendering, refresh, rotation, stale state and recovery verified.");
 } finally {
-  await cleanup?.(); view.renderer.destroy(); globalThis.fetch = originalFetch;
+  await cleanup?.(); view.renderer.destroy(); globalThis.fetch = originalFetch; Date.now = originalNow;
 }
 assert.equal(removed, true);

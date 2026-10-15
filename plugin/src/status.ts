@@ -18,7 +18,8 @@ export function parseStatus(response: string, options: OptionsType): TunnelStatu
   const disabled = z.object({ http_proxy: z.object({ enabled: z.literal(false) }) }).safeParse(raw).success;
   if (!disabled) {
     const { proxyIp, proxyPort } = discoverProxy(options, response);
-    proxy = `${proxyIp.includes(":") ? `[${proxyIp}]` : proxyIp}:${proxyPort}`;
+    const host = proxyIp.includes(":") ? `[${proxyIp}]` : proxyIp;
+    proxy = `${host}:${proxyPort}`;
   }
   return { ...status, proxy };
 }
@@ -32,20 +33,25 @@ export function uptime(startedAt: string | null, now: number): string {
 
 /** Poll serially, retain the last good response on failure, and stop on disposal. */
 export function watchStatus(read: () => Promise<string>, options: OptionsType,
-  update: (status: TunnelStatus | undefined, available: boolean, checked: number) => void,
+  update: (status: TunnelStatus | undefined, available: boolean, checked: number, lastSuccessful: number | undefined) => void,
   intervalMs = 5000) {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending: Promise<void> | undefined;
   let status: TunnelStatus | undefined;
+  let lastSuccessful: number | undefined;
   function refresh(): Promise<void> {
     if (stopped) return Promise.resolve();
     if (pending) return pending;
     clearTimeout(timer);
     pending = (async () => {
       let available = false;
-      try { status = parseStatus(await read(), options); available = true; } catch { /* Never display API errors or credentials. */ }
-      if (!stopped) update(status, available, Date.now());
+      try {
+        status = parseStatus(await read(), options);
+        lastSuccessful = Date.now();
+        available = true;
+      } catch { /* Never display API errors or credentials. */ }
+      if (!stopped) update(status, available, Date.now(), lastSuccessful);
     })().finally(() => {
       pending = undefined;
       if (!stopped) timer = setTimeout(() => { void refresh(); }, intervalMs);

@@ -68,3 +68,32 @@ test("polling refreshes automatically without overlapping slow calls", async () 
   }, options, () => { if (calls === 2) done(); }, 1);
   try { await completed; assert.equal(maxActive, 1); } finally { watcher.stop(); }
 });
+
+
+test("failed checks retain the last successful timestamp until recovery", async (t) => {
+  let now = Date.parse("2026-10-15T11:00:00Z");
+  t.mock.method(Date, "now", () => now);
+  let fail = true;
+  const updates: Array<{ available: boolean; checked: number; lastSuccessful?: number }> = [];
+  const watcher = watchStatus(() => fail ? Promise.reject(new Error("unavailable")) : Promise.resolve(response),
+    options, (_status, available, checked, lastSuccessful) => {
+      updates.push({ available, checked, lastSuccessful });
+    });
+  try {
+    await watcher.refresh();
+    assert.equal(updates.at(-1)?.lastSuccessful, undefined);
+    fail = false;
+    await watcher.refresh();
+    const successful = now;
+    assert.equal(updates.at(-1)?.lastSuccessful, successful);
+    fail = true;
+    now += 60000;
+    await watcher.refresh();
+    now += 60000;
+    await watcher.refresh();
+    assert.deepEqual(updates.at(-1), { available: false, checked: now, lastSuccessful: successful });
+    fail = false;
+    await watcher.refresh();
+    assert.deepEqual(updates.at(-1), { available: true, checked: now, lastSuccessful: now });
+  } finally { watcher.stop(); }
+});

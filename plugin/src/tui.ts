@@ -11,10 +11,10 @@ export default Plugin.define({
     const options = Options.parse(ctx.options);
     const client = makeClient(options, options.apiToken);
     const [snapshot, setSnapshot] = createSignal<{
-      status?: TunnelStatus; available: boolean; checked?: number;
+      status?: TunnelStatus; available: boolean; checked?: number; lastSuccessful?: number;
     }>({ available: false });
-    const watcher = watchStatus(client.status, options, (status, available, checked) => {
-      setSnapshot({ status, available, checked });
+    const watcher = watchStatus(client.status, options, (status, available, checked, lastSuccessful) => {
+      setSnapshot({ status, available, checked, lastSuccessful });
     });
     let removeSlot: (() => void) | undefined;
     try {
@@ -25,7 +25,7 @@ export default Plugin.define({
           get children() { return [
             jsx("text", { fg: ctx.theme.text.base, children: "Tunnel" }),
             jsx("text", { fg: ctx.theme.text.muted, get children() {
-              const { status, available, checked } = snapshot();
+              const { status, available, checked, lastSuccessful } = snapshot();
               if (!checked) return "Checking status…";
               const availability = available ? "API reachable" : "API unavailable · stale";
               const lines = [availability];
@@ -34,7 +34,7 @@ export default Plugin.define({
                 `Server: ${status.server ?? "—"}`,
                 `ID: ${status.connection_id ?? "—"}`,
                 `Started: ${status.started_at ?? "—"}`,
-                `Uptime: ${uptime(status.started_at, checked)}${available ? "" : " (at last check)"}`,
+                `Uptime: ${uptime(status.started_at, lastSuccessful ?? checked)}${available ? "" : " (at last successful check)"}`,
                 `Proxy: ${status.proxy}`,
               );
               lines.push(`Checked: ${new Date(checked).toLocaleTimeString()}`);

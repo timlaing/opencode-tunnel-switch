@@ -74,7 +74,9 @@ immediate refresh. `/tunnel-status` still adds a status message to the session.
 These commands make no model request.
 
 When a status request fails or returns invalid data, the display marks the API
-unavailable and any previous connection information as stale. API reachability
+unavailable and any previous connection information as stale. Stale uptime is
+frozen at the last successful check, while the check time records the latest
+attempt. API reachability
 does not prove the SSH tunnel can reach a provider. Error response bodies and API
 tokens are never displayed. Polling stops when the TUI plugin unloads.
 
