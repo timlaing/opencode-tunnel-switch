@@ -5,21 +5,22 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+## Plugin 1.2.0 — 2026-10-15
+
+- Add a live Tunnel section to the OpenCode sidebar with connection details,
+  API availability, stale-data handling and `/tunnel-refresh`.
+- Override the Solid serializer dependency to patched Seroval `^1.6.9` and
+  document the root-install override requirement.
 - Simplify retry-delay parsing without changing Retry-After handling.
 - Disable dependency lifecycle scripts in CI and publishing installs. Read pack
   metadata from stdin and invoke npm through its parent-provided absolute CLI path.
 
-- Override the Solid serializer dependency to patched Seroval `^1.6.9` and
-  document the root-install override requirement.
-
-- Add a live Tunnel section to the OpenCode sidebar with connection details,
-  API availability, stale-data handling and `/tunnel-refresh`.
+## Plugin 1.1.0 — 2026-10-15
 
 - Configure plugin publishing for public GitHub Packages and verify repository
   and package visibility before publication.
 - Update installation, security reporting, contribution and Sonar documentation
   for the public repository; retain GitHub npm authentication instructions.
-
 - Remove the Python server, its tests, deployment files and bundled releases.
 - Keep plugin CI, package publication and coverage; install the server separately
   from the `ssh-tunnel-switch` PyPI package.
