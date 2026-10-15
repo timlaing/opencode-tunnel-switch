@@ -6,10 +6,9 @@ This repository and its issues are public. Do not put vulnerability details,
 credentials, private keys, personal data or sensitive deployment information in
 public issues, pull requests or discussions.
 
-Use GitHub's **Report a vulnerability** option on the repository's Security tab
-when it is available. If private reporting is unavailable, contact the maintainer
-through an existing private channel and agree on a private method before sending
-sensitive reproduction material. Do not use a public issue as a substitute.
+Report vulnerabilities privately through [GitHub private vulnerability reporting](https://github.com/timlaing/opencode-tunnel-switch/security/advisories/new).
+This route is available to first-time reporters and sends the report privately to
+repository maintainers. Do not use a public issue as a substitute.
 
 No response-time guarantee or older-release support commitment is offered.
 Security fixes target the current development branch and the latest releases;
