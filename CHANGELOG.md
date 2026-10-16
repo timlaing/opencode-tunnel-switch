@@ -5,6 +5,20 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+- Degrade the TUI sidebar to one actionable toast when plugin options are
+  missing instead of failing setup with a raw schema error. OpenCode's TUI
+  runtime does not receive options from `opencode.json(c)`; they must also be
+  declared in `cli.json`.
+- Load the sidebar's OpenTUI/Solid runtimes from the host's
+  `opentui:runtime-module:` ids instead of the plugin's own installed copies.
+  OpenCode v2.0.25 resolves a plugin's `@opentui/solid` imports to a second
+  renderer instance whose context is never provided, which crashed every slot
+  render with `No renderer found`. Fall back to the local packages (test
+  harness) and, if rendering still fails, to one explanatory toast.
+- Run the dependency audit workflow on every pull request so its required
+  status check registers even when the plugin manifest and lockfile are
+  unchanged.
+
 ## [1.2.0] - 2026-10-15
 
 - Add a live Tunnel section to the OpenCode sidebar with connection details,

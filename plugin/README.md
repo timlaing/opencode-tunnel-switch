@@ -13,6 +13,27 @@ checks mark previous details stale. Reload OpenCode after updating the plugin.
 The TUI uses the same API options from the terminal machine, so remote-server
 setups need an API address reachable from that machine.
 
+OpenCode's TUI runtime does not receive plugin options from `opencode.json(c)`;
+it only receives options declared in the terminal's `cli.json`
+(`~/.config/opencode/cli.json`). Declare the same options there to enable the
+sidebar; without that declaration the sidebar degrades to one error toast while
+rotation and `/tunnel-status` keep working through the server plugin:
+
+```json
+{
+  "plugins": [
+    {
+      "package": "@timlaing/opencode-tunnel-switch@latest",
+      "options": {
+        "apiIp": "127.0.0.1",
+        "apiPort": 8765,
+        "apiToken": "copy-the-token-displayed-by-the-python-service"
+      }
+    }
+  ]
+}
+```
+
 ## Install from public GitHub Packages
 
 The package is distributed through GitHub Packages. Public npm packages on this registry still require authentication, as documented by [GitHub](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages). Use a GitHub personal access token (classic) with `read:packages`:
