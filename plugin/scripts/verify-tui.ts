@@ -34,33 +34,45 @@ const view = await testRender(() => claim!.render({ sessionID: "example" } as ne
 try {
   await refresh(); await view.renderOnce();
   let frame = view.captureCharFrame();
-  assert.match(frame, /Tunnel/);
-  assert.match(frame, /API: reachable/);
-  assert.match(frame, /Server: example-server/);
-  assert.match(frame, /127\.0\.0\.1:9988/);
-  assert.match(frame, /Started: \d{2}:\d{2}:\d{2} \d{2}\/\d{2}\/\d{2}/);
-  assert.match(frame, /Checked: 0s ago/);
+  const row = (frameText: string, label: string) => {
+    const line = frameText.split("\n").find((candidate) => candidate.includes(`${label}:`));
+    assert.ok(line, `missing ${label} row`);
+    return line.trimEnd();
+  };
+  assert.match(frame, /▼ Tunnel/);
+  assert.ok(row(frame, "API").endsWith("reachable"), row(frame, "API"));
+  assert.ok(row(frame, "Server").endsWith("example-server"), row(frame, "Server"));
+  assert.ok(row(frame, "Proxy").endsWith("127.0.0.1:9988"), row(frame, "Proxy"));
+  assert.match(row(frame, "Started"), /\d{2}:\d{2}:\d{2} \d{2}\/\d{2}\/\d{2}$/);
+  assert.ok(row(frame, "Checked").endsWith("0s ago"), row(frame, "Checked"));
   assert.doesNotMatch(frame, /ID:/);
   id = "rotated-connection";
   server = "rotated-server";
   await refresh(); await view.renderOnce();
-  assert.match(view.captureCharFrame(), /Server: rotated-server/);
+  assert.ok(row(view.captureCharFrame(), "Server").endsWith("rotated-server"));
   now += 60000;
   fail = true;
   await refresh(); await view.renderOnce();
   frame = view.captureCharFrame();
-  assert.match(frame, /API: unavailable/);
-  assert.match(frame, /last known/);
-  assert.match(frame, /Uptime: 1h 0m 0s/);
-  assert.match(frame, /successful\s+check/);
+  assert.ok(row(frame, "API").endsWith("unavailable"), row(frame, "API"));
+  assert.ok(row(frame, "State").endsWith("(last known)"), row(frame, "State"));
+  assert.ok(row(frame, "Uptime").endsWith("(at last success)"), row(frame, "Uptime"));
   assert.doesNotMatch(frame, /private-error|test-token/);
   fail = false;
   await refresh(); await view.renderOnce();
-  assert.match(view.captureCharFrame(), /API: reachable/);
-  assert.match(view.captureCharFrame(), /Uptime: 1h 1m 0s/);
+  frame = view.captureCharFrame();
+  assert.ok(row(frame, "API").endsWith("reachable"), row(frame, "API"));
+  assert.ok(row(frame, "Uptime").endsWith("1h 1m 0s"), row(frame, "Uptime"));
   assert.ok(calls.every(call => call === "GET /status"));
+  // Collapsing (like the MCP box) hides the rows and shows a muted summary.
+  await layer?.commands?.[1].run(); await view.renderOnce();
+  frame = view.captureCharFrame();
+  assert.match(frame, /▶ Tunnel \(reachable\)/);
+  assert.doesNotMatch(frame, /Server:/);
+  await layer?.commands?.[1].run(); await view.renderOnce();
+  assert.ok(row(view.captureCharFrame(), "Server").endsWith("rotated-server"));
   console.log(view.captureCharFrame());
-  console.log("TUI rendering, refresh, rotation, stale state and recovery verified.");
+  console.log("TUI rendering, refresh, rotation, stale state, collapse and recovery verified.");
 } finally {
   await cleanup?.(); view.renderer.destroy(); globalThis.fetch = originalFetch; Date.now = originalNow;
 }

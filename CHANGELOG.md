@@ -3,6 +3,14 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
+## Unreleased
+
+- Restyle the Tunnel sidebar after the MCP box: values right-aligned,
+  collapsible header (click or `/tunnel-toggle`) with ▶/▼ arrow and a muted
+  summary when collapsed. Fix span colours — inline runs need
+  `style={{ fg }}` (a bare `fg` prop on `<span>` is silently dropped) — and
+  use the theme's `text.feedback.*` colours for API/State coding.
+
 ## [1.3.0] - 2026-10-16
 
 - Polish the Tunnel sidebar: bold heading; white labels with grey values;
