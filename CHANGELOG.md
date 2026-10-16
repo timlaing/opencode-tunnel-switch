@@ -15,6 +15,9 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
   renderer instance whose context is never provided, which crashed every slot
   render with `No renderer found`. Fall back to the local packages (test
   harness) and, if rendering still fails, to one explanatory toast.
+- Run the dependency audit workflow on every pull request so its required
+  status check registers even when the plugin manifest and lockfile are
+  unchanged.
 
 ## [1.2.0] - 2026-10-15
 
