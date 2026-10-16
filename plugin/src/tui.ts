@@ -46,11 +46,12 @@ export default Plugin.define({
       // OpenCode's TUI runtime only receives options declared in cli.json; options
       // from opencode.json(c) stay server-side, so degrade with actionable guidance.
       const issue = (error as { issues?: Array<{ path: PropertyKey[]; message: string }> }).issues?.[0];
+      const detail = issue ? `${issue.path.join(".")}: ${issue.message}` : String(error);
       ctx.ui.toast.show({
         variant: "error",
         title: "tunnel-switch: options unavailable",
-        message: `${issue ? `${issue.path.join(".")}: ${issue.message}` : String(error)} — `
-          + "declare this plugin with its options in cli.json to enable the tunnel sidebar.",
+        message: `${detail} — declare this plugin with its options in cli.json to enable the `
+          + "tunnel sidebar.",
         duration: 10000,
       });
       return () => {};
