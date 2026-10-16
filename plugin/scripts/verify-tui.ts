@@ -60,3 +60,19 @@ try {
   await cleanup?.(); view.renderer.destroy(); globalThis.fetch = originalFetch; Date.now = originalNow;
 }
 assert.equal(removed, true);
+// Missing options (the TUI runtime drops opencode.json options) must degrade quietly.
+const toasts: Array<Record<string, unknown>> = [];
+const degraded = await plugin.setup({
+  options: {},
+  theme: { text: { base: "#ffffff", muted: "#aaaaaa" } },
+  ui: {
+    slot() { throw new Error("sidebar must not register without options"); },
+    toast: { show(value: Record<string, unknown>) { toasts.push(value); } },
+  },
+  keymap: { layer() { throw new Error("keymap must not register without options"); } },
+} as unknown as Context);
+assert.equal(toasts.length, 1);
+assert.match(String(toasts[0]?.message), /apiToken/);
+assert.match(String(toasts[0]?.message), /cli\.json/);
+degraded?.();
+console.log("Missing options degrade to one actionable toast.");
