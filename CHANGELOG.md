@@ -5,6 +5,8 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+## [1.2.1] - 2026-10-16
+
 - Degrade the TUI sidebar to one actionable toast when plugin options are
   missing instead of failing setup with a raw schema error. OpenCode's TUI
   runtime does not receive options from `opencode.json(c)`; they must also be
