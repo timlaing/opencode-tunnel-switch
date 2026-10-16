@@ -1,7 +1,6 @@
-import fs from "node:fs";
-import { runNpm } from "./npm-cli.mjs";
+import { readPackFromStdin, runNpm } from "./npm-cli.mjs";
 
-const [pack] = JSON.parse(fs.readFileSync(0, "utf8"));
+const [pack] = readPackFromStdin();
 const result = runNpm(["view", `${pack.name}@${pack.version}`, "--json", "--registry=https://npm.pkg.github.com"], { encoding: "utf8" });
 if (result.status !== 0) throw new Error("Cannot read back the published package from GitHub Packages");
 const published = JSON.parse(result.stdout);
