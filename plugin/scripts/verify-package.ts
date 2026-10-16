@@ -1,10 +1,10 @@
-import { readFileSync, mkdtempSync, rmSync } from "node:fs";
-import { runNpm } from "./npm-cli.mjs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { readPackFromStdin, runNpm } from "./npm-cli.mjs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Host } from "@opencode/plugin/host";
 
-const entries = JSON.parse(readFileSync(0, "utf8")) as Array<{
+const entries = readPackFromStdin() as Array<{
   name: string; filename: string; files: Array<{ path: string }>;
 }>;
 if (entries.length !== 1 || entries[0].name !== "@timlaing/opencode-tunnel-switch")

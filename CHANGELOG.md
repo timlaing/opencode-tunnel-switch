@@ -18,6 +18,10 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 - Run the dependency audit workflow on every pull request so its required
   status check registers even when the plugin manifest and lockfile are
   unchanged.
+- Fail publishing tools fast with a clear error naming the stdin interface
+  when invoked the old way with a manifest path argument or an interactive
+  terminal, and run npm's CLI under Node (via `npm_node_execpath`) instead of
+  whichever runtime executes the script.
 
 ## [1.2.0] - 2026-10-15
 
