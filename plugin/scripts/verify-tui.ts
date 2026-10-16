@@ -10,6 +10,7 @@ let claim: SlotClaim | undefined;
 let layer: KeymapLayer | undefined;
 let fail = false;
 let id = "example-connection";
+let server = "example-server";
 let removed = false;
 const calls: string[] = [];
 globalThis.fetch = ((url, init) => {
@@ -17,8 +18,8 @@ globalThis.fetch = ((url, init) => {
   calls.push(`${init?.method} ${new URL(address).pathname}`);
   assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer test-token");
   if (fail) return Promise.reject(new Error("private-error-must-not-render"));
-  return Promise.resolve(new Response(JSON.stringify({ state: "connected", connection_id: id,
-    started_at: "2026-10-15T10:00:00Z", server: "example-server",
+  return Promise.resolve(new Response(JSON.stringify({ state: "connected", connection_id: id, server,
+    started_at: "2026-10-15T10:00:00Z",
     http_proxy: { enabled: true, ip: "127.0.0.1", port: 9988 } })));
 }) as typeof fetch;
 const cleanup = await plugin.setup({
@@ -34,24 +35,28 @@ try {
   await refresh(); await view.renderOnce();
   let frame = view.captureCharFrame();
   assert.match(frame, /Tunnel/);
-  assert.match(frame, /API reachable/);
-  assert.match(frame, /example-connection/);
-  assert.match(frame, /127.0.0.1:9988/);
+  assert.match(frame, /API: reachable/);
+  assert.match(frame, /Server: example-server/);
+  assert.match(frame, /127\.0\.0\.1:9988/);
+  assert.match(frame, /Started: \d{2}:\d{2}:\d{2} \d{2}\/\d{2}\/\d{2}/);
+  assert.match(frame, /Checked: 0s ago/);
+  assert.doesNotMatch(frame, /ID:/);
   id = "rotated-connection";
+  server = "rotated-server";
   await refresh(); await view.renderOnce();
-  assert.match(view.captureCharFrame(), /rotated-connection/);
+  assert.match(view.captureCharFrame(), /Server: rotated-server/);
   now += 60000;
   fail = true;
   await refresh(); await view.renderOnce();
   frame = view.captureCharFrame();
-  assert.match(frame, /API unavailable/);
+  assert.match(frame, /API: unavailable/);
   assert.match(frame, /last known/);
   assert.match(frame, /Uptime: 1h 0m 0s/);
   assert.match(frame, /successful\s+check/);
   assert.doesNotMatch(frame, /private-error|test-token/);
   fail = false;
   await refresh(); await view.renderOnce();
-  assert.match(view.captureCharFrame(), /API reachable/);
+  assert.match(view.captureCharFrame(), /API: reachable/);
   assert.match(view.captureCharFrame(), /Uptime: 1h 1m 0s/);
   assert.ok(calls.every(call => call === "GET /status"));
   console.log(view.captureCharFrame());
