@@ -35,6 +35,28 @@ async function uiRuntime(): Promise<{ readonly jsx: JsxRuntime["jsx"]; readonly 
   }
 }
 
+/** Format an ISO timestamp as HH:MM:SS DD/MM/YY. */
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} `
+    + `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${pad(date.getFullYear() % 100)}`;
+}
+
+/** Compact relative age for the last check, e.g. "25s ago" or "2.5hr ago". */
+function formatAge(from: number, to: number): string {
+  const seconds = Math.max(0, Math.round((to - from) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${(seconds / 3600).toFixed(1)}hr ago`;
+  return `${(seconds / 86400).toFixed(1)}d ago`;
+}
+
+/** TextAttributes.BOLD as a raw bitmask; @opentui/core must not be imported. */
+const BOLD = 1;
+
 export default Plugin.define({
   id: "tunnel-switch",
   /** Add a read-only sidebar with bounded serial polling and disposal cleanup. */
@@ -68,42 +90,58 @@ export default Plugin.define({
       return () => {};
     }
     const { jsx, createSignal } = ui;
+    // Labels render white and values grey; API and State colour-code their
+    // values with theme semantics when the host exposes them.
+    const semantic = (name: string, fallback: string) => {
+      const value = (ctx.theme as unknown as Record<string, unknown>)[name];
+      return typeof value === "string" ? value : fallback;
+    };
+    const positive = semantic("success", "#a6e3a1");
+    const warning = semantic("warning", "#f9e2af");
+    const negative = semantic("error", "#f38ba8");
     const client = makeClient(options, options.apiToken);
     const [snapshot, setSnapshot] = createSignal<{
       status?: TunnelStatus; available: boolean; checked?: number; lastSuccessful?: number;
     }>({ available: false });
+    const [clock, setClock] = createSignal(Date.now());
+    // Tick once a second so the relative "Checked" age stays live between polls.
+    const ticker = setInterval(() => setClock(Date.now()), 1000);
     const watcher = watchStatus(client.status, options, (status, available, checked, lastSuccessful) => {
       setSnapshot({ status, available, checked, lastSuccessful });
     });
     let removeSlot: (() => void) | undefined;
     let warned = false;
+    const stop = () => { clearInterval(ticker); watcher.stop(); removeSlot?.(); };
     try {
       removeSlot = ctx.ui.slot({
         append: "sidebar.content",
         render: () => {
           try {
-            return jsx("box", {
-              flexDirection: "column", marginTop: 1,
-              get children() { return [
-                jsx("text", { fg: ctx.theme.text.base, children: "Tunnel" }),
-                jsx("text", { fg: ctx.theme.text.muted, get children() {
-                  const { status, available, checked, lastSuccessful } = snapshot();
-                  if (!checked) return "Checking status…";
-                  const availability = available ? "API reachable" : "API unavailable · stale";
-                  const lines = [availability];
-                  if (status) lines.push(
-                    `State: ${status.state}${available ? "" : " (last known)"}`,
-                    `Server: ${status.server ?? "—"}`,
-                    `ID: ${status.connection_id ?? "—"}`,
-                    `Started: ${status.started_at ?? "—"}`,
-                    `Uptime: ${uptime(status.started_at, lastSuccessful ?? checked)}${available ? "" : " (at last successful check)"}`,
-                    `Proxy: ${status.proxy}`,
-                  );
-                  lines.push(`Checked: ${new Date(checked).toLocaleTimeString()}`);
-                  return lines.join("\n");
-                } }),
-              ]; },
-            });
+            const heading = () => jsx("text", { fg: ctx.theme.text.base, attributes: BOLD, children: "Tunnel" });
+            const line = (label: string, value: string | (() => string), colour?: string) =>
+              jsx("text", { get children() { return [
+                jsx("span", { fg: ctx.theme.text.base, children: `${label}: ` }),
+                jsx("span", { fg: colour ?? ctx.theme.text.muted, get children() { return typeof value === "function" ? value() : value; } }),
+              ]; } });
+            return jsx("box", { flexDirection: "column", marginTop: 1, get children() {
+              const { status, available, checked, lastSuccessful } = snapshot();
+              if (!checked) return [heading(), jsx("text", { fg: ctx.theme.text.muted, children: "Checking status…" })];
+              const now = clock();
+              const lines = [
+                heading(),
+                line("API", available ? "reachable" : "unavailable", available ? positive : negative),
+              ];
+              if (status) lines.push(
+                line("State", () => `${status.state}${available ? "" : " (last known)"}`,
+                  status.state === "connected" ? positive : status.state === "rotating" ? warning : negative),
+                line("Server", status.server ?? "—"),
+                line("Started", formatTimestamp(status.started_at)),
+                line("Uptime", () => `${uptime(status.started_at, lastSuccessful ?? checked)}${available ? "" : " (at last successful check)"}`),
+                line("Proxy", status.proxy),
+              );
+              lines.push(line("Checked", () => formatAge(checked, now)));
+              return lines;
+            } });
           } catch {
             // The local fallback instance cannot render against the host's
             // renderer; degrade once instead of crashing the slot boundary.
@@ -130,10 +168,9 @@ export default Plugin.define({
         }],
       }));
     } catch (error) {
-      watcher.stop();
-      removeSlot?.();
+      stop();
       throw error;
     }
-    return () => { watcher.stop(); removeSlot?.(); };
+    return stop;
   },
 });

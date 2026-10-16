@@ -3,6 +3,12 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
+## Unreleased
+
+- Polish the Tunnel sidebar: bold heading; white labels with grey values;
+  colour-coded API and State values; `Started` as `HH:MM:SS DD/MM/YY`;
+  `Checked` as a live relative age ("25s ago"); drop the connection ID row.
+
 ## [1.2.1] - 2026-10-16
 
 - Degrade the TUI sidebar to one actionable toast when plugin options are
