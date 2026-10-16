@@ -159,7 +159,7 @@ export default Plugin.define({
                   line("Server", status.server ?? "—"),
                   line("Started", formatTimestamp(status.started_at)),
                   line("Uptime", () => uptime(status.started_at, lastSuccessful ?? checked), undefined,
-                    available ? undefined : " (at last check)"),
+                    available ? undefined : " (at last success)"),
                   line("Proxy", status.proxy),
                 );
               }

@@ -56,7 +56,7 @@ try {
   frame = view.captureCharFrame();
   assert.ok(row(frame, "API").endsWith("unavailable"), row(frame, "API"));
   assert.ok(row(frame, "State").endsWith("(last known)"), row(frame, "State"));
-  assert.ok(row(frame, "Uptime").endsWith("(at last check)"), row(frame, "Uptime"));
+  assert.ok(row(frame, "Uptime").endsWith("(at last success)"), row(frame, "Uptime"));
   assert.doesNotMatch(frame, /private-error|test-token/);
   fail = false;
   await refresh(); await view.renderOnce();
