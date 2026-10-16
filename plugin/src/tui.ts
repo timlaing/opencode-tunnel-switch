@@ -54,9 +54,6 @@ function formatAge(from: number, to: number): string {
   return `${(seconds / 86400).toFixed(1)}d ago`;
 }
 
-/** TextAttributes.BOLD as a raw bitmask; @opentui/core must not be imported. */
-const BOLD = 1;
-
 export default Plugin.define({
   id: "tunnel-switch",
   /** Add a read-only sidebar with bounded serial polling and disposal cleanup. */
@@ -90,20 +87,25 @@ export default Plugin.define({
       return () => {};
     }
     const { jsx, createSignal } = ui;
-    // Labels render white and values grey; API and State colour-code their
-    // values with theme semantics when the host exposes them.
-    const semantic = (name: string, fallback: string) => {
-      const value = (ctx.theme as unknown as Record<string, unknown>)[name];
-      return typeof value === "string" ? value : fallback;
+    // Follow the MCP sidebar's conventions: <text fg> for whole-line colours,
+    // style={{ fg }} on <span> for inline runs (a bare fg prop on a span is
+    // silently dropped by the reconciler), theme feedback colours for states.
+    const themed = (path: readonly string[], fallback: string): string => {
+      let current: unknown = ctx.theme;
+      for (const key of path) current = (current as Record<string, unknown> | undefined)?.[key];
+      return typeof current === "string" ? current : fallback;
     };
-    const positive = semantic("success", "#a6e3a1");
-    const warning = semantic("warning", "#f9e2af");
-    const negative = semantic("error", "#f38ba8");
+    const base = themed(["text", "base"], "#ffffff");
+    const muted = themed(["text", "muted"], "#868895");
+    const positive = themed(["text", "feedback", "success", "base"], "#a6e3a1");
+    const warning = themed(["text", "feedback", "warning", "base"], "#f9e2af");
+    const negative = themed(["text", "feedback", "error", "base"], "#f38ba8");
     const client = makeClient(options, options.apiToken);
     const [snapshot, setSnapshot] = createSignal<{
       status?: TunnelStatus; available: boolean; checked?: number; lastSuccessful?: number;
     }>({ available: false });
     const [clock, setClock] = createSignal(Date.now());
+    const [expanded, setExpanded] = createSignal(true);
     // Tick once a second so the relative "Checked" age stays live between polls.
     const ticker = setInterval(() => setClock(Date.now()), 1000);
     const watcher = watchStatus(client.status, options, (status, available, checked, lastSuccessful) => {
@@ -117,30 +119,52 @@ export default Plugin.define({
         append: "sidebar.content",
         render: () => {
           try {
-            const heading = () => jsx("text", { fg: ctx.theme.text.base, attributes: BOLD, children: "Tunnel" });
-            const line = (label: string, value: string | (() => string), colour?: string) =>
-              jsx("text", { get children() { return [
-                jsx("span", { fg: ctx.theme.text.base, children: `${label}: ` }),
-                jsx("span", { fg: colour ?? ctx.theme.text.muted, get children() { return typeof value === "function" ? value() : value; } }),
+            // A row: white label left, value flush right (grey or state-coloured),
+            // matching the MCP sidebar's label/value layout.
+            const line = (label: string, value: string | (() => string), colour?: string, suffix?: string) =>
+              jsx("box", { flexDirection: "row", gap: 1, minWidth: 0, get children() { return [
+                jsx("text", { fg: base, wrapMode: "none", truncate: true, flexGrow: 1, flexShrink: 1, minWidth: 0, children: `${label}:` }),
+                jsx("text", { wrapMode: "none", truncate: true, flexShrink: 0, get children() {
+                  const children = [jsx("span", {
+                    style: { fg: colour ?? muted },
+                    get children() { return typeof value === "function" ? value() : value; },
+                  })];
+                  if (suffix) children.push(jsx("span", { style: { fg: muted }, children: suffix }));
+                  return children;
+                } }),
               ]; } });
             return jsx("box", { flexDirection: "column", marginTop: 1, get children() {
               const { status, available, checked, lastSuccessful } = snapshot();
-              if (!checked) return [heading(), jsx("text", { fg: ctx.theme.text.muted, children: "Checking status…" })];
-              const now = clock();
+              const open = expanded();
+              // Collapsible header, toggled by clicking like the MCP sidebar box.
+              const header = jsx("box", { flexDirection: "row", gap: 1, onMouseDown: () => setExpanded(!open), get children() { return [
+                jsx("text", { fg: base, children: open ? "▼" : "▶" }),
+                jsx("text", { fg: base, get children() {
+                  const children = [jsx("b", { children: "Tunnel" })];
+                  if (!open) children.push(jsx("span", { style: { fg: muted },
+                    children: !checked ? " (checking…)" : available ? " (reachable)" : " (unavailable)" }));
+                  return children;
+                } }),
+              ]; } });
+              if (!open) return [header];
+              if (!checked) return [header, jsx("text", { fg: muted, children: "Checking status…" })];
               const lines = [
-                heading(),
                 line("API", available ? "reachable" : "unavailable", available ? positive : negative),
               ];
-              if (status) lines.push(
-                line("State", () => `${status.state}${available ? "" : " (last known)"}`,
-                  status.state === "connected" ? positive : status.state === "rotating" ? warning : negative),
-                line("Server", status.server ?? "—"),
-                line("Started", formatTimestamp(status.started_at)),
-                line("Uptime", () => `${uptime(status.started_at, lastSuccessful ?? checked)}${available ? "" : " (at last successful check)"}`),
-                line("Proxy", status.proxy),
-              );
-              lines.push(line("Checked", () => formatAge(checked, now)));
-              return lines;
+              if (status) {
+                const stateColour = status.state === "connected" ? positive
+                  : status.state === "rotating" ? warning : negative;
+                lines.push(
+                  line("State", status.state, stateColour, available ? undefined : " (last known)"),
+                  line("Server", status.server ?? "—"),
+                  line("Started", formatTimestamp(status.started_at)),
+                  line("Uptime", () => uptime(status.started_at, lastSuccessful ?? checked), undefined,
+                    available ? undefined : " (at last check)"),
+                  line("Proxy", status.proxy),
+                );
+              }
+              lines.push(line("Checked", () => formatAge(checked, clock())));
+              return [header, ...lines];
             } });
           } catch {
             // The local fallback instance cannot render against the host's
@@ -165,6 +189,10 @@ export default Plugin.define({
           id: "tunnel-switch.refresh", title: "Refresh tunnel status", group: "Tunnel",
           palette: true, slash: { name: "tunnel-refresh" },
           run: async () => { await watcher.refresh(); },
+        }, {
+          id: "tunnel-switch.toggle", title: "Toggle tunnel sidebar details", group: "Tunnel",
+          palette: true, slash: { name: "tunnel-toggle" },
+          run: async () => { setExpanded(!expanded()); },
         }],
       }));
     } catch (error) {
