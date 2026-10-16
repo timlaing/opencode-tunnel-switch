@@ -3,7 +3,7 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
-## Unreleased
+## [1.3.0] - 2026-10-16
 
 - Polish the Tunnel sidebar: bold heading; white labels with grey values;
   colour-coded API and State values; `Started` as `HH:MM:SS DD/MM/YY`;
