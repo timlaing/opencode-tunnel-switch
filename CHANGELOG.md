@@ -3,6 +3,14 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
+## Unreleased
+
+- Refactor the Tunnel sidebar render path to clear the SonarQube findings on
+  `plugin/src/tui.ts`: hoist the row builder out of the render closure (max
+  nesting is now 5 levels), replace the two nested ternaries with
+  `collapsedSummary()`/`stateColour()` helpers, and make `/tunnel-toggle`'s
+  handler synchronous. No behaviour change.
+
 ## [1.4.0] - 2026-10-17
 
 - Restyle the Tunnel sidebar after the MCP box: values right-aligned,
