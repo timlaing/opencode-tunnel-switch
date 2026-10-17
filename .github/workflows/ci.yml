@@ -36,7 +36,7 @@ jobs:
         with:
           bun-version: '1.4.3'
       - name: Verify sidebar rendering and refresh
-        run: bun --conditions=browser scripts/verify-tui.ts
+        run: bun --conditions=browser test/verify-tui.ts
       - run: npm run test:coverage
       - name: Normalize plugin LCOV paths to repository root
         run: sed -i 's|^SF:|SF:plugin/|' coverage/lcov.info

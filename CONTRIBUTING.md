@@ -19,7 +19,7 @@ Use the repository's configured no-reply email and GPG key for signed commits. C
 ```sh
 npm run check --prefix plugin
 npm test --prefix plugin
-bun --conditions=browser plugin/scripts/verify-tui.ts
+bun --conditions=browser plugin/test/verify-tui.ts
 ```
 
 GitHub CodeQL default setup scans JavaScript/TypeScript and Actions workflows.

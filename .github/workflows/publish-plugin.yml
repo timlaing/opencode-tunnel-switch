@@ -51,7 +51,7 @@ jobs:
       - run: npm ci --ignore-scripts --prefix plugin
       - run: npm run check --prefix plugin
       - run: npm test --prefix plugin
-      - run: bun --conditions=browser plugin/scripts/verify-tui.ts
+      - run: bun --conditions=browser plugin/test/verify-tui.ts
       - name: Pack and verify the installed artifact
         working-directory: plugin
         run: |
