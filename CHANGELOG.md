@@ -3,7 +3,7 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
-## Unreleased
+## [1.4.0] - 2026-10-17
 
 - Restyle the Tunnel sidebar after the MCP box: values right-aligned,
   collapsible header (click or `/tunnel-toggle`) with ▶/▼ arrow and a muted
