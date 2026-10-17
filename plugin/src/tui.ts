@@ -100,6 +100,31 @@ export default Plugin.define({
     const positive = themed(["text", "feedback", "success", "base"], "#a6e3a1");
     const warning = themed(["text", "feedback", "warning", "base"], "#f9e2af");
     const negative = themed(["text", "feedback", "error", "base"], "#f38ba8");
+    // A row: white label left, value flush right (grey or state-coloured),
+    // matching the MCP sidebar's label/value layout.
+    const line = (label: string, value: string | (() => string), colour?: string, suffix?: string) =>
+      jsx("box", { flexDirection: "row", gap: 1, minWidth: 0, get children() { return [
+        jsx("text", { fg: base, wrapMode: "none", truncate: true, flexGrow: 1, flexShrink: 1, minWidth: 0, children: `${label}:` }),
+        jsx("text", { wrapMode: "none", truncate: true, flexShrink: 0, get children() {
+          const children = [jsx("span", {
+            style: { fg: colour ?? muted },
+            get children() { return typeof value === "function" ? value() : value; },
+          })];
+          if (suffix) children.push(jsx("span", { style: { fg: muted }, children: suffix }));
+          return children;
+        } }),
+      ]; } });
+    // Muted summary shown beside "Tunnel" while the sidebar is collapsed.
+    const collapsedSummary = (checked: number | undefined, available: boolean): string => {
+      if (!checked) return " (checking…)";
+      return available ? " (reachable)" : " (unavailable)";
+    };
+    // Feedback colour for a tunnel state.
+    const stateColour = (state: TunnelStatus["state"]): string => {
+      if (state === "connected") return positive;
+      if (state === "rotating") return warning;
+      return negative;
+    };
     const client = makeClient(options, options.apiToken);
     const [snapshot, setSnapshot] = createSignal<{
       status?: TunnelStatus; available: boolean; checked?: number; lastSuccessful?: number;
@@ -119,20 +144,6 @@ export default Plugin.define({
         append: "sidebar.content",
         render: () => {
           try {
-            // A row: white label left, value flush right (grey or state-coloured),
-            // matching the MCP sidebar's label/value layout.
-            const line = (label: string, value: string | (() => string), colour?: string, suffix?: string) =>
-              jsx("box", { flexDirection: "row", gap: 1, minWidth: 0, get children() { return [
-                jsx("text", { fg: base, wrapMode: "none", truncate: true, flexGrow: 1, flexShrink: 1, minWidth: 0, children: `${label}:` }),
-                jsx("text", { wrapMode: "none", truncate: true, flexShrink: 0, get children() {
-                  const children = [jsx("span", {
-                    style: { fg: colour ?? muted },
-                    get children() { return typeof value === "function" ? value() : value; },
-                  })];
-                  if (suffix) children.push(jsx("span", { style: { fg: muted }, children: suffix }));
-                  return children;
-                } }),
-              ]; } });
             return jsx("box", { flexDirection: "column", marginTop: 1, get children() {
               const { status, available, checked, lastSuccessful } = snapshot();
               const open = expanded();
@@ -142,7 +153,7 @@ export default Plugin.define({
                 jsx("text", { fg: base, get children() {
                   const children = [jsx("b", { children: "Tunnel" })];
                   if (!open) children.push(jsx("span", { style: { fg: muted },
-                    children: !checked ? " (checking…)" : available ? " (reachable)" : " (unavailable)" }));
+                    children: collapsedSummary(checked, available) }));
                   return children;
                 } }),
               ]; } });
@@ -152,10 +163,8 @@ export default Plugin.define({
                 line("API", available ? "reachable" : "unavailable", available ? positive : negative),
               ];
               if (status) {
-                const stateColour = status.state === "connected" ? positive
-                  : status.state === "rotating" ? warning : negative;
                 lines.push(
-                  line("State", status.state, stateColour, available ? undefined : " (last known)"),
+                  line("State", status.state, stateColour(status.state), available ? undefined : " (last known)"),
                   line("Server", status.server ?? "—"),
                   line("Started", formatTimestamp(status.started_at)),
                   line("Uptime", () => uptime(status.started_at, lastSuccessful ?? checked), undefined,
@@ -192,7 +201,7 @@ export default Plugin.define({
         }, {
           id: "tunnel-switch.toggle", title: "Toggle tunnel sidebar details", group: "Tunnel",
           palette: true, slash: { name: "tunnel-toggle" },
-          run: async () => { setExpanded(!expanded()); },
+          run: () => { setExpanded(!expanded()); },
         }],
       }));
     } catch (error) {
