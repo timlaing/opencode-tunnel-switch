@@ -27,7 +27,9 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          # Node 26 is required: the sidebar test renders through @opentui/core,
+          # whose Node backend needs the node:ffi builtin (absent in Node 24 LTS).
+          node-version: '26'
           cache: npm
           cache-dependency-path: plugin/package-lock.json
           registry-url: https://npm.pkg.github.com
@@ -51,7 +53,7 @@ jobs:
       - run: npm ci --ignore-scripts --prefix plugin
       - run: npm run check --prefix plugin
       - run: npm test --prefix plugin
-      - run: bun --conditions=browser plugin/scripts/verify-tui.ts
+      - run: bun --conditions=browser plugin/test/verify-tui.ts
       - name: Pack and verify the installed artifact
         working-directory: plugin
         run: |

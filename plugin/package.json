@@ -8,9 +8,9 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "node --import tsx --test test/*.test.ts",
-    "test:coverage": "mkdir -p coverage && node --import tsx --experimental-test-coverage --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/*.test.ts",
-    "test:tui": "node --conditions=browser --import tsx scripts/verify-tui.ts",
+    "test": "node --conditions=browser --import tsx --test test/*.test.ts",
+    "test:coverage": "mkdir -p coverage && node --conditions=browser --import tsx --experimental-test-coverage --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/*.test.ts",
+    "test:tui": "node --conditions=browser --import tsx test/verify-tui.ts",
     "verify:package": "bun scripts/verify-package.ts",
     "publish:package": "node scripts/publish-package.mjs",
     "verify:published": "node scripts/verify-published-package.mjs"
