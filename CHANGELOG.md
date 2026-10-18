@@ -3,6 +3,26 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
+## [1.4.2] - 2026-10-18
+
+- Close the coverage gap behind the SonarQube quality gate. The Tunnel sidebar
+  was verified only by a standalone script that ran outside the suite emitting
+  `lcov.info`, so all of `plugin/src/tui.ts` read as uncovered. Add a node:test
+  suite covering the render paths — reachable rows, rotating/disconnected state
+  colours, stale rows after an API failure, the pre-first-response placeholder,
+  a null server, and the missing-options toast.
+- Run the test scripts with `--conditions=browser`. Without it `solid-js`
+  resolves to the non-reactive server build, so signal updates never re-render.
+- Move `verify-tui.ts` from `plugin/scripts/` to `plugin/test/` so it is
+  classified as test code and stops counting as production source needing
+  coverage.
+- Run CI on Node 26 so the sidebar test can render: `@opentui/core`'s Node
+  backend needs the `node:ffi` builtin, which Node 24 LTS lacks. There is no
+  software fallback renderer.
+
+No behaviour change — the published runtime (`index.ts`, `tui.ts`, `src/**`) is
+byte-identical to 1.4.1.
+
 ## [1.4.1] - 2026-10-17
 
 - Refactor the Tunnel sidebar render path to clear the SonarQube findings on
