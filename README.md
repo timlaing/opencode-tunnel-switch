@@ -1,5 +1,22 @@
 # OpenCode v2 Tunnel Switch
 
+[![CI](https://github.com/timlaing/opencode-tunnel-switch/actions/workflows/ci.yml/badge.svg)](https://github.com/timlaing/opencode-tunnel-switch/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/tag/timlaing/opencode-tunnel-switch)](https://github.com/timlaing/opencode-tunnel-switch/releases)
+[![License](https://img.shields.io/github/license/timlaing/opencode-tunnel-switch)](LICENSE)
+
+[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=coverage)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=bugs)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
+
 An OpenCode v2 plugin that detects server error message, rotates an HTTP proxy via an external REST server, and retries the current model request. It discovers the server's HTTP proxy and configures proxy environment variables for the OpenCode server process. The OpenCode sidebar displays live tunnel information; `/tunnel-refresh` refreshes it immediately, and `/tunnel-status` displays the connection without a model request.
 
 ## Install and run
