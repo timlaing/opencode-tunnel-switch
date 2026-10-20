@@ -48,7 +48,7 @@ they use the parent npm CLI path rather than searching `PATH` for an executable.
 
 ## Releases
 
-Update `CHANGELOG.md`, `plugin/package.json` and its lockfile for a plugin release. Run verification, create a signed `v<version>` tag on the approved revision, then publish a matching GitHub release. The `Publish plugin` workflow verifies and publishes the packed archive to public GitHub Packages and reads it back for validation. Manual dispatch publishes the version on `main`. Published versions are immutable; confirm the workflow and registry result before announcing availability.
+Update `CHANGELOG.md`, `plugin/package.json` and its lockfile for a plugin release. Run verification, create a signed `v<version>` tag on the approved revision, then publish a matching GitHub release. The `Publish plugin` workflow verifies the packed archive and publishes it to the public npm registry (authenticated with OIDC trusted publishing, with signed provenance) and to public GitHub Packages, then reads it back from both registries for validation. Manual dispatch publishes the version on `main`. Published versions are immutable; confirm the workflow and both registry results before announcing availability.
 
 Python distributions and server releases are managed in `ssh-tunnel-switch`. This repository no longer builds combined install bundles. See the [package guide](plugin/README.md) for authentication and publication details.
 

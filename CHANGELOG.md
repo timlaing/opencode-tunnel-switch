@@ -3,6 +3,29 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
+## Unreleased
+
+- Publish the plugin to the public npm registry (`https://registry.npmjs.org`)
+  in addition to GitHub Packages. `Publish plugin` uploads the same tested
+  tarball to both registries and reads both back — retrying transient readback
+  failures for a bounded period, since a fresh version can lag on a registry's
+  read path; npm authenticates with OIDC
+  trusted publishing (`id-token: write`, no stored npm token) and the npm
+  publish carries signed provenance. The readback verifies the
+  `dist.attestations` entry on every npm release, so an unattested npm publish
+  fails the workflow. The workflow splits in two: dependency, test and packaging
+  steps run in a job without OIDC credentials, and a separate job — the only one
+  granted `id-token: write`, running no dependencies — receives the verified
+  archive and publishes it, so only the publish job's code can mint an npm
+  token. The publish/readback helpers now pass an
+  `--@timlaing:registry` override alongside `--registry`, because npm resolves
+  an `@timlaing:registry` scope mapping ahead of the plain `--registry` flag
+  and would otherwise silently redirect scoped publishes to GitHub Packages.
+  The publish helper probes every registry before uploading to any — archive
+  integrity and repository metadata are validated in that preflight: published
+  versions are immutable, so a divergence between registries can only be
+  repaired by a version bump and must be detected before anything lands.
+
 ## [1.4.2] - 2026-10-18
 
 - Close the coverage gap behind the SonarQube quality gate. The Tunnel sidebar
