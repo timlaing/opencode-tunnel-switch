@@ -11,6 +11,11 @@ const targets = targetRegistries.map(({ registry, access, provenance }) => {
   const args = registryArgs(registry, pack.name);
   const result = runNpm(["view", `${pack.name}@${pack.version}`, "dist.integrity", "repository.url", "--json", ...args], { encoding: "utf8" });
   if (result.status === 0) {
+    // npm can exit 0 with empty output when the package exists but the
+    // queried version does not; treat that as a missing version rather than
+    // letting JSON.parse throw before either registry is probed.
+    if (!result.stdout.trim())
+      return { registry, access, provenance, args, integrity: null, repository: null };
     const existing = JSON.parse(result.stdout);
     return { registry, access, provenance, args, integrity: existing["dist.integrity"], repository: existing["repository.url"] };
   }

@@ -17,6 +17,9 @@ const scenarios = {
   unauthorized: { npmjs: "unauthorized", gh: "missing", publishes: 0, status: 1 },
   // GH divergence must abort before anything is uploaded to npm.
   "gh-diverges": { npmjs: "missing", gh: "different", publishes: 0, status: 1 },
+  // npm can exit 0 with empty stdout for a missing version; that must count
+  // as "missing here" (probe-then-publish uploads), never as a parse crash.
+  "empty-output": { npmjs: "empty", gh: "empty", publishes: 2, status: 0 },
 } as const;
 for (const [scenario, expected] of Object.entries(scenarios)) {
   test(`publishing handles ${scenario} versions without unsafe overwrite`, () => {
@@ -28,6 +31,8 @@ const fs = require('node:fs');
 fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
 if (process.argv[2] === 'publish') process.exit(0);
 const state = process.env[process.argv.includes('--registry=https://registry.npmjs.org') ? 'TEST_NPM_NPMJS' : 'TEST_NPM_GH'];
+// npm's missing-version quirk: exit 0 with no output at all.
+if (state === 'empty') process.exit(0);
 if (state === 'missing' || state === 'unauthorized') {
   console.log(JSON.stringify({ error: { code: state === 'missing' ? 'E404' : 'E401' } }));
   process.exit(1);
