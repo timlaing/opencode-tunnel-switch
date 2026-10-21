@@ -121,6 +121,12 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify the published package
         working-directory: plugin
+        # A fresh version can lag on npm's read path well beyond the helper's
+        # 15s default (observed on the first 1.4.3 publish, where uploads
+        # succeeded but readback lost the race); allow 11 attempts 10s apart
+        # here — ten retry intervals, ~100s between the first and last read.
         run: npm run verify:published < plugin-pack.json
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERIFY_ATTEMPTS: '11'
+          VERIFY_RETRY_DELAY_MS: '10000'
