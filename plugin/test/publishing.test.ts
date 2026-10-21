@@ -187,6 +187,7 @@ fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)
 let n = 0;
 try { n = Number(fs.readFileSync(process.env.TEST_NPM_COUNT, 'utf8') || 0); } catch {}
 fs.writeFileSync(process.env.TEST_NPM_COUNT, String(n + 1));
+if (process.env.TEST_NPM_READBACK === 'empty-once' && n === 0) process.exit(0);
 if (process.env.TEST_NPM_READBACK === 'always-404' || (process.env.TEST_NPM_READBACK === 'flaky' && n === 0)) {
   console.log(JSON.stringify({ error: { code: 'E404' } }));
   process.exit(1);
@@ -207,6 +208,12 @@ console.log(${JSON.stringify(JSON.stringify(published))});
     const flaky = run("flaky");
     assert.equal(flaky.status, 0, flaky.stderr);
     assert.equal(views().length, 3, "one retry on the first registry, one readback on the second");
+    rmSync(log); rmSync(count);
+    // Exit 0 with empty output is the propagation case: it must be retried
+    // as transient, never crash on JSON.parse of the empty body.
+    const empty = run("empty-once");
+    assert.equal(empty.status, 0, empty.stderr);
+    assert.equal(views().length, 3, "an empty first readback must be retried, not parsed");
     rmSync(log); rmSync(count);
     // A persistent 404 must stop after the configured attempt bound.
     const persistent = run("always-404");

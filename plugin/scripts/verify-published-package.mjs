@@ -19,7 +19,9 @@ for (const { registry, provenance } of targetRegistries) {
   let result;
   for (let attempt = 1; ; attempt++) {
     result = runNpm(["view", `${pack.name}@${pack.version}`, "--json", ...registryArgs(registry, pack.name)], { encoding: "utf8" });
-    if (result.status === 0) break;
+    // npm can exit 0 with empty output while metadata is still propagating;
+    // only a non-empty body is a readable readback.
+    if (result.status === 0 && result.stdout.trim()) break;
     let error;
     try { error = JSON.parse(result.stdout).error; } catch {}
     const transient = !error || transientCodes.has(error.code) || /^E5\d\d$/.test(error.code ?? "");
