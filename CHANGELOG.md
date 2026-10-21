@@ -5,7 +5,8 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
-- Raise the CI readback bound to 10 attempts × 10s (`VERIFY_ATTEMPTS`,
+- Raise the CI readback bound to 11 attempts × 10s — ten retry intervals,
+  ~100s between the first and last read (`VERIFY_ATTEMPTS`,
   `VERIFY_RETRY_DELAY_MS` on the `Publish plugin` verify step). The first
   real npm publish of 1.4.3 showed registry metadata can lag longer than the
   helper's 15s default: uploads succeeded while readback lost the race.
