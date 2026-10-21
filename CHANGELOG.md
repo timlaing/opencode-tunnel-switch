@@ -3,7 +3,7 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
-## Unreleased
+## [1.4.3] - 2026-10-21
 
 - Publish the plugin to the public npm registry (`https://registry.npmjs.org`)
   in addition to GitHub Packages. `Publish plugin` uploads the same tested
@@ -25,6 +25,10 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
   integrity and repository metadata are validated in that preflight: published
   versions are immutable, so a divergence between registries can only be
   repaired by a version bump and must be detected before anything lands.
+- Treat npm's exit-0-with-empty-output responses — a missing version during
+  the publish preflight, metadata still propagating during readback — as
+  missing/transient cases instead of crashing in `JSON.parse`, with tests
+  pinning both paths.
 
 ## [1.4.2] - 2026-10-18
 
