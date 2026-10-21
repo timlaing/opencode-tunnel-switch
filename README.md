@@ -35,7 +35,7 @@ Install the plugin using the [public GitHub Packages guide](plugin/README.md), t
 {
   "plugin": [
     [
-      "@timlaing/opencode-tunnel-switch@1.0.0",
+      "@timlaing/opencode-tunnel-switch@1.4.3",
       {
         "apiIp": "127.0.0.1",
         "apiPort": 8765,
