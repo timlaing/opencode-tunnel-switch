@@ -13,14 +13,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Verify and publish public npm package
+  # Job 1 runs dependencies, tests and packaging WITHOUT OIDC credentials:
+  # ACTIONS_ID_TOKEN_REQUEST_* is only injected into jobs granted
+  # id-token: write, so compromised dependency or test code in this job
+  # cannot mint an npm token. It hands the verified archive to the publish job.
+  verify:
+    name: Verify the packed archive
     if: github.repository == 'timlaing/opencode-tunnel-switch' && ((github.event_name == 'release' && !startsWith(github.event.release.tag_name, 'service-v')) || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,8 +35,6 @@ jobs:
           node-version: '26'
           cache: npm
           cache-dependency-path: plugin/package-lock.json
-          registry-url: https://npm.pkg.github.com
-          scope: '@timlaing'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: '1.4.3'
@@ -59,6 +60,45 @@ jobs:
         run: |
           npm pack --json > "$RUNNER_TEMP/plugin-pack.json"
           npm run verify:package < "$RUNNER_TEMP/plugin-pack.json"
+          cp "$RUNNER_TEMP/plugin-pack.json" plugin-pack.json
+      - name: Upload the verified archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plugin-package
+          path: |
+            plugin/plugin-pack.json
+            plugin/*.tgz
+          if-no-files-found: error
+
+  # Job 2 is the ONLY job granted id-token: write, and it executes no
+  # dependencies and no tests — only the checked-out publish helpers, npm and
+  # the artifact verified by the job above. Everything in this job is within
+  # the trusted publisher's blast radius.
+  publish:
+    name: Publish to npm and GitHub Packages
+    if: github.repository == 'timlaing/opencode-tunnel-switch' && ((github.event_name == 'release' && !startsWith(github.event.release.tag_name, 'service-v')) || github.ref == 'refs/heads/main')
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      # id-token: npm's OIDC trusted publishing exchanges this for a
+      # short-lived npm token; no npm secret is stored in the repository.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+          registry-url: https://npm.pkg.github.com
+          scope: '@timlaing'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: plugin-package
+          path: plugin
       - name: Require a public repository
         run: |
           test "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.visibility')" = public
@@ -70,13 +110,17 @@ jobs:
         run: |
           # GitHub package visibility is managed separately from npm access.
           test "$(gh api users/timlaing/packages/npm/opencode-tunnel-switch --jq '.visibility')" = public
-      - name: Publish the tested archive
+      - name: Publish the tested archive to both registries
         working-directory: plugin
-        run: npm run publish:package < "$RUNNER_TEMP/plugin-pack.json"
+        # npm (registry.npmjs.org) authenticates through OIDC trusted
+        # publishing: the package must list this repository and
+        # publish-plugin.yml as a trusted publisher on npmjs.com. GitHub
+        # Packages keeps using NODE_AUTH_TOKEN below.
+        run: npm run publish:package < plugin-pack.json
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify the published package
         working-directory: plugin
-        run: npm run verify:published < "$RUNNER_TEMP/plugin-pack.json"
+        run: npm run verify:published < plugin-pack.json
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

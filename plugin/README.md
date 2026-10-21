@@ -34,9 +34,21 @@ rotation and `/tunnel-status` keep working through the server plugin:
 }
 ```
 
-## Install from public GitHub Packages
+## Install
 
-The package is distributed through GitHub Packages. Public npm packages on this registry still require authentication, as documented by [GitHub](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages). Use a GitHub personal access token (classic) with `read:packages`:
+The same archive is published to the public npm registry and to GitHub Packages.
+
+### npm
+
+No authentication is required:
+
+```sh
+npm install @timlaing/opencode-tunnel-switch
+```
+
+### GitHub Packages
+
+Public npm packages on GitHub Packages still require authentication, as documented by [GitHub](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages). Use a GitHub personal access token (classic) with `read:packages`:
 
 ```sh
 npm login --scope=@timlaing --auth-type=legacy --registry=https://npm.pkg.github.com
@@ -47,6 +59,8 @@ Add this scope mapping to your user `~/.npmrc` if it is not already present:
 ```ini
 @timlaing:registry=https://npm.pkg.github.com
 ```
+
+Note that npm resolves a scope mapping ahead of a plain `--registry` flag, so an `@timlaing` mapping routes every `@timlaing/opencode-tunnel-switch` install to GitHub Packages.
 
 Keep registry credentials in your npm user configuration, not the repository. Configure OpenCode using the singular `plugin` key and the `[package, options]` tuple:
 
@@ -79,8 +93,8 @@ bundled dependencies.
 
 ## Publishing
 
-The repository's `Publish plugin` workflow runs plugin types and tests, checks the package allowlist, installs the packed tarball and verifies its OpenCode entrypoint before publishing that exact archive to `https://npm.pkg.github.com`.
+The repository's `Publish plugin` workflow runs plugin types and tests, checks the package allowlist, installs the packed tarball and verifies its OpenCode entrypoint in a job that holds no OIDC credentials, then hands that exact archive to a separate publishing job — the only one granted `id-token: write`, and the only one that runs no dependencies and no tests — which uploads it to `https://registry.npmjs.org` and `https://npm.pkg.github.com`.
 
-Publishing runs when a GitHub release is published, or manually on `main`. A release tag must be `v<package-version>`, matching `package.json`. Update the manifest and lockfile version before releasing a new version. Published versions cannot be overwritten.
+Publishing runs when a GitHub release is published, or manually on `main`. A release tag must be `v<package-version>`, matching `package.json`. Update the manifest and lockfile version before releasing a new version. Published versions cannot be overwritten; a version that already exists on a registry is skipped only when its archive integrity matches the tested tarball, and is rejected when it differs.
 
-Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no publishing PAT or repository secret is required. The package is linked to the public repository. The manifest requests public access; the workflow checks that both the repository and existing GitHub package are public before publishing. GitHub package visibility is a separate setting: maintainers manage it under [package settings](https://github.com/users/timlaing/packages/npm/opencode-tunnel-switch/settings), rather than relying on npm access flags. The workflow reads the published version back from the npm registry and verifies its archive integrity and repository link. Do not set the npm `private: true` flag, which prohibits publication.
+The npm registry publish authenticates through [OIDC trusted publishing](https://docs.npmjs.com/trusted-publishers/): npmjs.com must list this repository and `publish-plugin.yml` as a trusted publisher for the package, and the workflow holds `id-token: write`. No npm token is stored in the repository. Signed provenance is enforced rather than assumed: npm releases publish with `--provenance`, and the readback requires a `dist.attestations` entry for every npm release, so an unattested npm version fails the workflow. Two things carry no attestation by design — the `0.0.0*` placeholder versions created by the one-time trusted-publishing bootstrap (they hold no code, and releases never route through them), and GitHub Packages, which does not support npm provenance attestations. GitHub Packages publishes with the workflow's `GITHUB_TOKEN` and `packages: write`; no publishing PAT is required. The package is linked to the public repository. The manifest requests public access; the workflow checks that both the repository and existing GitHub package are public before publishing. GitHub package visibility is a separate setting: maintainers manage it under [package settings](https://github.com/users/timlaing/packages/npm/opencode-tunnel-switch/settings), rather than relying on npm access flags. The workflow reads the published version back from both registries and verifies its archive integrity and repository link. Do not set the npm `private: true` flag, which prohibits publication.
