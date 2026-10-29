@@ -1,5 +1,5 @@
 import path from "node:path";
-import { assertPublishedMatches, expectedRepositoryUrl, probeVersion, readPackFromStdin, readPublishedVersion, registryArgs, retrySettings, freshRetrySettings, runNpm, targetRegistries, terminalStdio } from "./npm-cli.mjs";
+import { assertPublishedMatches, expectedRepositoryUrl, probeVersion, readPackFromStdin, readPublishedVersion, registryArgs, retrySettings, runNpm, targetRegistries, terminalStdio } from "./npm-cli.mjs";
 
 const [pack] = readPackFromStdin();
 const settings = retrySettings();
@@ -66,19 +66,21 @@ for (const { registry, access, provenance, args, integrity } of targets) {
   // captures npm's output and replays it for the CI log; a maintainer
   // publishing from a terminal keeps npm's stdio on that terminal so npm can
   // prompt for an OTP or a login. Use a large maxBuffer for captured output
-  // so verbose npm logging cannot terminate the upload.
-  const uploadOptions = terminal ?? { encoding: "utf8", maxBuffer: 1024 * 1024 * 10 }; // 10 MiB
+  // so verbose npm logging cannot terminate the upload. Give the upload a
+  // bounded timeout (10 minutes) so a stalled publish proceeds to the
+  // existing readback verification path.
+  const uploadOptions = terminal ?? { encoding: "utf8", maxBuffer: 1024 * 1024 * 10, timeout: 600000 }; // 10 MiB, 10 min
   const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], uploadOptions);
   if (!terminal) {
     if (upload.stdout) process.stdout.write(upload.stdout);
     if (upload.stderr) process.stderr.write(upload.stderr);
   }
   if (upload.status === 0) continue;
+  // Upload failed (or timed out). Use the ORIGINAL step settings (shared
+  // stepDeadline) for verification readback so the total step budget is
+  // respected and we don't start a fresh full retry window.
   try {
-    // Use a fresh deadline for verification readback so preflight/upload time
-    // does not consume the readback budget.
-    const verifySettings = freshRetrySettings();
-    const published = readPublishedVersion(registry, pack, verifySettings);
+    const published = readPublishedVersion(registry, pack, settings);
     assertPublishedMatches(pack, published, registry, provenance);
     console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive after a failed upload; an earlier publish attempt already landed it, no upload required.`);
     continue;

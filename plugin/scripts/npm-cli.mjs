@@ -66,29 +66,27 @@ export const expectedRepositoryUrl = "git+https://github.com/timlaing/opencode-t
  * anything else falls back to the default rather than risking a retry loop
  * whose bound never matches (NaN === NaN is false).
  *
- * The returned object includes a `deadline` computed once per call, so every
- * read one script run makes — preflight probes, staged-version verification,
- * readback — shares a single wall-clock budget. That budget accounts for the
- * maximum permitted Retry-After hint (60s per attempt) plus the configured
- * delay, keeping a fully-retried publish step (11 attempts × (10s + 60s) =
- * ~12.8 minutes) well inside the 15-minute job timeout; the local 5 × 3s
- * defaults budget 5 × (3s + 60s) = ~5 minutes. A zero-delay configuration
- * (tests, ad-hoc local runs) bounds by attempt count with a per-call timeout
- * of 30s so a stalled read cannot hang forever. */
+ * The returned object includes a `stepDeadline` (total budget for this
+ * script run) and `perReadBudget` (budget per registry read). Each registry
+ * read gets its own deadline = min(stepDeadline, Date.now() + perReadBudget)
+ * so later reads retain a fair share even if earlier reads consumed much of
+ * the step budget. The step budget is capped at 7 minutes so the publish
+ * step and the separate verify step can both finish within GitHub Actions'
+ * 15-minute job timeout. A zero-delay configuration (tests, ad-hoc local
+ * runs) bounds by attempt count with a per-call timeout of 30s so a stalled
+ * read cannot hang forever. */
 export function retrySettings() {
   const requestedAttempts = Number.parseInt(process.env.VERIFY_ATTEMPTS ?? "", 10);
   const attempts = Number.isInteger(requestedAttempts) && requestedAttempts > 0 ? requestedAttempts : 5;
   const requestedDelayMs = Number.parseInt(process.env.VERIFY_RETRY_DELAY_MS ?? "", 10);
   const retryDelayMs = Number.isInteger(requestedDelayMs) && requestedDelayMs >= 0 ? requestedDelayMs : 3000;
   const maxHintMs = 60000; // 60s cap per attempt
-  const deadline = retryDelayMs > 0 ? Date.now() + attempts * (retryDelayMs + maxHintMs) : Infinity;
-  return { attempts, retryDelayMs, deadline };
-}
-
-/** Create a fresh settings object with a new deadline (for readback after
- * upload failure, which must not share the preflight/upload deadline). */
-export function freshRetrySettings() {
-  return retrySettings();
+  // Per-read budget: attempts × (configured delay + max hint)
+  const perReadBudget = retryDelayMs > 0 ? attempts * (retryDelayMs + maxHintMs) : Infinity;
+  // Step budget: cap at 7 minutes (420s) so publish + verify steps fit in 15m job timeout
+  const stepBudget = retryDelayMs > 0 ? Math.min(perReadBudget * 2, 420000) : Infinity;
+  const stepDeadline = retryDelayMs > 0 ? Date.now() + stepBudget : Infinity;
+  return { attempts, retryDelayMs, perReadBudget, stepDeadline };
 }
 
 /** A freshly published version can lag on a registry's read path (npm stages
@@ -122,13 +120,14 @@ const waitMs = (error, retryDelayMs) => {
   return Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 60) * 1000 : retryDelayMs;
 };
 
-/** Run npm view with a per-call timeout derived from the shared deadline.
+/** Run npm view with a per-call timeout derived from the step deadline.
  * Returns the parsed JSON document once a non-empty body is served. */
 const PER_CALL_TIMEOUT_MS = 30000; // 30s per call when no deadline
 export function readPublishedVersion(registry, pack, settings) {
-  const { attempts, retryDelayMs, deadline } = settings;
+  const { attempts, retryDelayMs, perReadBudget, stepDeadline } = settings;
+  const readDeadline = Math.min(stepDeadline, Date.now() + perReadBudget);
   for (let attempt = 1; ; attempt++) {
-    const remaining = deadline - Date.now();
+    const remaining = readDeadline - Date.now();
     if (remaining <= 0)
       throw new Error(`Read deadline exceeded for ${registry} after ${attempt - 1} attempt(s)`);
     const timeout = Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS;
@@ -147,7 +146,7 @@ export function readPublishedVersion(registry, pack, settings) {
     if (!isTransient(error, result.status) || attempt === attempts)
       throw new Error(`Cannot read back the published package from ${registry} after ${attempt} attempt(s); check registry authentication, propagation and connectivity.`);
     warnRetry(registry, error);
-    sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, deadline - Date.now())));
+    sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, readDeadline - Date.now())));
   }
 }
 
@@ -161,7 +160,7 @@ export function readPublishedVersion(registry, pack, settings) {
  * An existing version that lacks dist.integrity is treated as incomplete
  * metadata — reject before any upload so an unverifiable artifact never
  * lands. */
-function handleProbeResult(result, registry, attempt, attempts, deadline, retryDelayMs) {
+function handleProbeResult(result, registry, attempt, attempts, readDeadline, retryDelayMs) {
   // npm exits 0 with empty output when the package exists but the
   // queried version does not; both empty and E404 mean "missing here".
   if (result.status === 0) {
@@ -181,14 +180,15 @@ function handleProbeResult(result, registry, attempt, attempts, deadline, retryD
   if (!isTransient(error, result.status) || attempt === attempts)
     throw new Error(`Cannot determine whether the package version exists on ${registry}; check registry authentication and connectivity.`);
   warnRetry(registry, error);
-  sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, deadline - Date.now())));
+  sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, readDeadline - Date.now())));
   return undefined; // signal to retry
 }
 
 export function probeVersion(registry, pack, settings) {
-  const { attempts, retryDelayMs, deadline } = settings;
+  const { attempts, retryDelayMs, perReadBudget, stepDeadline } = settings;
+  const readDeadline = Math.min(stepDeadline, Date.now() + perReadBudget);
   for (let attempt = 1; ; attempt++) {
-    const remaining = deadline - Date.now();
+    const remaining = readDeadline - Date.now();
     if (remaining <= 0)
       throw new Error(`Probe deadline exceeded for ${registry} after ${attempt - 1} attempt(s)`);
     const timeout = Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS;
@@ -196,7 +196,7 @@ export function probeVersion(registry, pack, settings) {
       ["view", `${pack.name}@${pack.version}`, "dist.integrity", "repository.url", "dist.attestations.url", "--json", ...registryArgs(registry, pack.name)],
       { encoding: "utf8", timeout }
     );
-    const handled = handleProbeResult(result, registry, attempt, attempts, deadline, retryDelayMs);
+    const handled = handleProbeResult(result, registry, attempt, attempts, readDeadline, retryDelayMs);
     if (handled !== undefined) return handled;
   }
 }
