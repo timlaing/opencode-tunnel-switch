@@ -5,6 +5,13 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+- Raise the seroval override floor from `^1.6.9` to `~1.6.11` (resolving
+  1.6.12): GHSA-f86p-h4j2-7qgj/GHSA-9wx9-5pv9-3349 were later extended to
+  cover `1.5.5–1.6.10`, so the previous floor resolved inside the affected
+  range and the required `Dependency audit` check failed. A lockfile-only
+  bump would not move the tree past the override, so package.json and the
+  lockfile change together; verified with `npm ci`, `npm audit` (0
+  vulnerabilities) and the TUI check.
 - Bound the tunnel name in the collapsed summary to 20 columns (elided with
   `…`) so a long hostname cannot push the reachability state out of the
   header, and replace the nested ternary the reachability state was built
