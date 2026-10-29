@@ -3,7 +3,7 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
-## Unreleased
+## [1.5.0] - 2026-10-29
 
 - Raise the seroval override floor from `^1.6.9` to `~1.6.11` (resolving
   1.6.12): GHSA-f86p-h4j2-7qgj/GHSA-9wx9-5pv9-3349 were later extended to
