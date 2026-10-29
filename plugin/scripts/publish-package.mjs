@@ -8,6 +8,9 @@ const baseSettings = retrySettings();
 const jobStart = Date.now();
 const JOB_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 const jobDeadline = jobStart + JOB_TIMEOUT_MS;
+// Publish step gets 7 minutes (420s) so verify step can also fit in 15m job timeout.
+const PUBLISH_STEP_BUDGET_MS = 7 * 60 * 1000; // 7 minutes
+const publishStepDeadline = jobStart + PUBLISH_STEP_BUDGET_MS;
 
 // Probe every registry before uploading to any. Published versions are
 // immutable, so a version that lands on one registry with contents the other
@@ -70,9 +73,9 @@ for (const { registry, provenance, integrity, repository, attestation } of targe
 // partially verified release.
 //
 // Upload timeout is shared across both registries (total 10 minutes) but also
-// bounded by the job deadline.
+// bounded by the publish step deadline.
 const terminal = terminalStdio();
-const uploadDeadline = Math.min(jobDeadline, jobStart + 600000); // 10 minutes total for both uploads
+const uploadDeadline = Math.min(publishStepDeadline, jobStart + 600000); // 10 minutes total for both uploads
 
 // Reserve time for recovery readbacks: 1 minute per registry that needs upload
 const registriesNeedingUpload = targets.filter(t => t.integrity === null).length;
@@ -95,8 +98,8 @@ for (let i = 0; i < targets.length; i++) {
   const attest = provenance && process.env.GITHUB_ACTIONS === "true" ? ["--provenance"] : [];
   
   if (!skipUpload) {
-    // Shared upload timeout: remaining time in the 10-minute budget, bounded by job deadline.
-    const uploadTimeout = Math.max(1000, Math.min(uploadDeadline, jobDeadline) - Date.now());
+    // Shared upload timeout: remaining time in the 10-minute budget, bounded by publish step deadline.
+    const uploadTimeout = Math.max(1000, Math.min(uploadDeadline, publishStepDeadline) - Date.now());
     // For terminal-backed uploads, merge the calculated timeout into the options
     // so interactive uploads also respect the shared budget.
     const uploadOptions = terminal
@@ -111,11 +114,11 @@ for (let i = 0; i < targets.length; i++) {
     // Upload failed (or timed out). Fall through to verification readback.
   }
   
-  // Verification readback for failed upload: use job deadline, reserve time for recovery of other failed uploads.
+  // Verification readback for failed upload: use publish step deadline, reserve time for recovery of other failed uploads.
   const remainingRegistries = targets.slice(i + 1).filter(t => t.integrity === null).length;
   const verifyReservedMs = remainingRegistries * 60000 + recoveryReservedMs;
-  const verifyDeadline = jobDeadline - verifyReservedMs;
-  const verifySettings = { ...baseSettings, stepDeadline: Math.min(jobDeadline, verifyDeadline) };
+  const verifyDeadline = publishStepDeadline - verifyReservedMs;
+  const verifySettings = { ...baseSettings, stepDeadline: Math.min(publishStepDeadline, verifyDeadline) };
   
   try {
     const published = readPublishedVersion(registry, pack, verifySettings);

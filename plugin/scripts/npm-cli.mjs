@@ -136,7 +136,8 @@ export function readPublishedVersion(registry, pack, settings, reservedMs = 0) {
     const remaining = readDeadline - Date.now();
     if (remaining <= 0)
       throw new Error(`Read deadline exceeded for ${registry} after ${attempt - 1} attempt(s)`);
-    const timeout = Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS;
+    // Cap each npm view call at 30s so a stalled call cannot consume the retry budget.
+    const timeout = Math.min(Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS, PER_CALL_TIMEOUT_MS);
     const result = runNpm(
       ["view", `${pack.name}@${pack.version}`, "--json", ...registryArgs(registry, pack.name)],
       { encoding: "utf8", timeout }
@@ -197,7 +198,8 @@ export function probeVersion(registry, pack, settings, reservedMs = 0) {
     const remaining = readDeadline - Date.now();
     if (remaining <= 0)
       throw new Error(`Probe deadline exceeded for ${registry} after ${attempt - 1} attempt(s)`);
-    const timeout = Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS;
+    // Cap each npm view call at 30s so a stalled call cannot consume the retry budget.
+    const timeout = Math.min(Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS, PER_CALL_TIMEOUT_MS);
     const result = runNpm(
       ["view", `${pack.name}@${pack.version}`, "dist.integrity", "repository.url", "dist.attestations.url", "--json", ...registryArgs(registry, pack.name)],
       { encoding: "utf8", timeout }
