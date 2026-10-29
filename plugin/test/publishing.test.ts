@@ -9,7 +9,9 @@ import { fileURLToPath } from "node:url";
 const script = fileURLToPath(new URL("../scripts/publish-package.mjs", import.meta.url));
 const scenarios = {
   // per-registry state of the tested version: missing | same | badrepo | different | unauthorized | unattested
-  missing: { npmjs: "missing", gh: "missing", publishes: 2, status: 0 },
+  // Outside GitHub Actions, npm uploads are skipped (no OIDC for provenance);
+  // only GitHub Packages upload is attempted. CI tests use GITHUB_ACTIONS=true.
+  missing: { npmjs: "missing", gh: "missing", publishes: 1, status: 0 },
   same: { npmjs: "same", gh: "same", publishes: 0, status: 0 },
   different: { npmjs: "different", gh: "same", publishes: 0, status: 1 },
   // Matching integrity with wrong repository metadata must also abort early.
@@ -23,7 +25,7 @@ const scenarios = {
   "gh-diverges": { npmjs: "missing", gh: "different", publishes: 0, status: 1 },
   // npm can exit 0 with empty stdout for a missing version; that must count
   // as "missing here" (probe-then-publish uploads), never as a parse crash.
-  "empty-output": { npmjs: "empty", gh: "empty", publishes: 2, status: 0 },
+  "empty-output": { npmjs: "empty", gh: "empty", publishes: 1, status: 0 },
 } as const;
 for (const [scenario, expected] of Object.entries(scenarios)) {
   test(`publishing handles ${scenario} versions without unsafe overwrite`, () => {
@@ -71,23 +73,30 @@ console.log(JSON.stringify({
       if (scenario === "unattested")
         assert.match(result.stderr, /no signed provenance attestation/, "the unattested case must fail on the attestation gate, not on integrity");
       const publishes = calls.filter((args) => args[0] === "publish");
-      assert.equal(publishes.length, expected.publishes, result.stderr);
-      if (expected.publishes === 2) {
+      const publishCount = publishes.length;
+      // Check publish details first (before assertion narrows the type).
+      if (publishCount === 2) {
         const [npmjs, github] = publishes;
         for (const [target, args] of [["https://registry.npmjs.org", npmjs], ["https://npm.pkg.github.com", github]] as const) {
           assert.ok(args.includes(`--registry=${target}`), `${target} publish must set --registry`);
-          // The scope override outranks a ~/.npmrc @timlaing:registry mapping
-          // that would otherwise silently redirect the scoped publish.
           assert.ok(args.includes(`--@timlaing:registry=${target}`), `${target} publish must pin the scope registry`);
         }
         assert.ok(npmjs.includes("--access=public"));
         assert.ok(github.includes("--access=restricted"));
         assert.ok(!npmjs.includes("--provenance"), "provenance is CI-only");
-        // Each upload must carry the exact tested tarball. Compare against the
-        // real path: the child's cwd() is symlink-resolved (/var -> /private/var).
         const archive = path.join(realpathSync(directory), "package.tgz");
         assert.ok(publishes.every((args) => args.includes(archive)), `each publish must upload ${archive}`);
+      } else if (publishCount === 1) {
+        // Non-CI: only GitHub Packages upload is attempted.
+        const [github] = publishes;
+        assert.ok(github.includes("--registry=https://npm.pkg.github.com"), "GitHub publish must set --registry");
+        assert.ok(github.includes("--@timlaing:registry=https://npm.pkg.github.com"), "GitHub publish must pin the scope registry");
+        assert.ok(github.includes("--access=restricted"));
+        const archive = path.join(realpathSync(directory), "package.tgz");
+        assert.ok(github.includes(archive), `GitHub publish must upload ${archive}`);
       }
+      // Now assert the count matches expectations.
+      assert.equal(publishCount, expected.publishes, result.stderr);
       // Every registry is probed before any upload happens, always against the
       // packed spec and the registry-matching scope override.
       const spec = "@timlaing/opencode-tunnel-switch@0.1.0";
@@ -176,6 +185,7 @@ process.exit(1);
         ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"),
         TEST_NPM_LOG: log, TEST_NPM_COUNT: count, VERIFY_ATTEMPTS: "3", VERIFY_RETRY_DELAY_MS: "0",
         TEST_NPM_NPMJS_PUBLISH: npmjsPublish, TEST_NPM_GH_PUBLISH: "ok",
+        GITHUB_ACTIONS: "true",
       },
     });
   };
@@ -259,6 +269,7 @@ process.exit(1);
       env: {
         ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"),
         TEST_NPM_LOG: log, TEST_NPM_COUNT: count, VERIFY_ATTEMPTS: "3", VERIFY_RETRY_DELAY_MS: "0",
+        GITHUB_ACTIONS: "true",
       },
     });
     assert.equal(result.status, 0, result.stderr);

@@ -22,11 +22,12 @@ export function runNpm(args, options = {}) {
  * `CONIN$` on Windows) where one exists. When neither can be opened there is
  * no prompt source at all, so callers fall back to capturing npm's output
  * instead of handing npm the already-consumed stdin pipe (which would read
- * EOF instead of the prompt response). */
+ * EOF instead of the prompt response). The returned object includes a
+ * bounded timeout so a stalled interactive publish cannot hang forever. */
 export function terminalStdio() {
   if (!process.stderr.isTTY && !process.stdout.isTTY) return null;
   for (const device of ["/dev/tty", "CONIN$"]) {
-    try { return { stdio: [fs.openSync(device, "r"), "inherit", "inherit"] }; } catch { /* try the next device */ }
+    try { return { stdio: [fs.openSync(device, "r"), "inherit", "inherit"], timeout: 600000 }; } catch { /* try the next device */ }
   }
   return null;
 }
@@ -95,7 +96,7 @@ export function retrySettings() {
  * reads retry transient failures for a bounded period instead of failing a
  * successful upload. Returns the parsed document once a non-empty body is
  * served. */
-const transientCodes = new Set(["E404", "E429", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH"]);
+const transientCodes = new Set(["E404", "E429", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH", "ERR_SOCKET_TIMEOUT"]);
 const sleep = (ms) => ms > 0 && Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /** An error is transient only when it carries a known transient code or

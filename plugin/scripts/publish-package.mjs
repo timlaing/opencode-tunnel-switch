@@ -52,35 +52,49 @@ for (const { registry, provenance, integrity, repository, attestation } of targe
 // unattested version or a registry that stays unreadable past the bound
 // keeps the failure (wrapped together with the upload error), so no
 // remaining registry receives an unretractable upload while another holds
-// something unverified. This path also works for interactive runs: the
-// verification spawns its own captured npm calls, independent of the
-// upload's stdio, so a maintainer rerunning from a terminal after npm
-// staged the version converges instead of seeing a raw failure.
+// something unverified.
+//
+// Outside GitHub Actions, npm uploads require provenance (OIDC). If provenance
+// cannot be produced, skip the upload and rely on readback verification of an
+// already-staged attested version. This prevents an immutable, partially
+// verified release.
+//
+// Upload timeout is shared across both registries (total 10 minutes) so the
+// combined upload time stays within the job limit. A stalled interactive
+// publish also gets this timeout via terminalStdio().
+//
+// When upload fails, verification readback gets its own fresh deadline
+// starting after the failure, so a staged version that becomes readable after
+// the step deadline is still recoverable.
 const terminal = terminalStdio();
+const uploadDeadline = Date.now() + 600000; // 10 minutes total for both uploads
 for (const { registry, access, provenance, args, integrity } of targets) {
   if (integrity !== null) continue;
+  // Outside GitHub Actions, npm (provenance=true) cannot produce attestation.
+  // Skip the upload and let readback verification handle an already-staged
+  // attested version. If nothing is staged, the readback will fail appropriately.
+  if (provenance && process.env.GITHUB_ACTIONS !== "true") {
+    console.log(`Skipping npm upload outside GitHub Actions (no OIDC token for provenance); will verify via readback.`);
+    continue;
+  }
   // --provenance is CI-only (it needs the Actions OIDC token) and npmjs-only
   // (GitHub Packages does not accept provenance attestations).
   const attest = provenance && process.env.GITHUB_ACTIONS === "true" ? ["--provenance"] : [];
-  // A non-interactive run (CI, where OIDC trusted publishing needs no prompt)
-  // captures npm's output and replays it for the CI log; a maintainer
-  // publishing from a terminal keeps npm's stdio on that terminal so npm can
-  // prompt for an OTP or a login. Use a large maxBuffer for captured output
-  // so verbose npm logging cannot terminate the upload. Give the upload a
-  // bounded timeout (10 minutes) so a stalled publish proceeds to the
-  // existing readback verification path.
-  const uploadOptions = terminal ?? { encoding: "utf8", maxBuffer: 1024 * 1024 * 10, timeout: 600000 }; // 10 MiB, 10 min
+  // Shared upload timeout: remaining time in the 10-minute budget.
+  const uploadTimeout = Math.max(1000, uploadDeadline - Date.now());
+  const uploadOptions = terminal ?? { encoding: "utf8", maxBuffer: 1024 * 1024 * 10, timeout: uploadTimeout };
   const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], uploadOptions);
   if (!terminal) {
     if (upload.stdout) process.stdout.write(upload.stdout);
     if (upload.stderr) process.stderr.write(upload.stderr);
   }
   if (upload.status === 0) continue;
-  // Upload failed (or timed out). Use the ORIGINAL step settings (shared
-  // stepDeadline) for verification readback so the total step budget is
-  // respected and we don't start a fresh full retry window.
+  // Upload failed (or timed out). Use a FRESH deadline for verification
+  // readback starting NOW, so a staged version that becomes readable after
+  // the preflight/upload deadline is still recoverable.
+  const verifySettings = retrySettings();
   try {
-    const published = readPublishedVersion(registry, pack, settings);
+    const published = readPublishedVersion(registry, pack, verifySettings);
     assertPublishedMatches(pack, published, registry, provenance);
     console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive after a failed upload; an earlier publish attempt already landed it, no upload required.`);
     continue;
