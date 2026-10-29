@@ -5,6 +5,19 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+- Restyle the Tunnel sidebar rows to match the sibling TUI plugins: row
+  titles are now bold in the theme's base colour, prefixed by two spaces and
+  no longer suffixed with a colon; the tunnel heading keeps `text.base`.
+  The relative "Checked" age is pinned explicitly to the theme's muted
+  colour. `captureSpans()` assertions now guard the scheme end to end: bold
+  base titles, muted values elsewhere, and API/State values resolved from
+  the theme's `feedback.success`/`feedback.warning`/`feedback.error` palette
+  — reachable/connected green, rotating amber, unavailable/disconnected red
+  — with the no-feedback-theme fallbacks pinned alongside.
+- Name the tunnel in the sidebar's collapsed summary: while collapsed the
+  header now reads `▶ Tunnel (<server> · reachable)` — using the configured
+  server name from the last status response, and falling back to the bare
+  `(reachable)`/`(unavailable)`/`(checking…)` state when no name is known.
 - Raise the CI readback bound to 11 attempts × 10s — ten retry intervals,
   ~100s between the first and last read (`VERIFY_ATTEMPTS`,
   `VERIFY_RETRY_DELAY_MS` on the `Publish plugin` verify step). The first
