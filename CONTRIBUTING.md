@@ -37,7 +37,7 @@ npm run verify:package < /tmp/tunnel-switch-plugin-pack.json
 
 OpenCode SDK is pinned to `@opencode/plugin` 2.0.29. Local application loading was previously verified with OpenCode v2.0.25; CI does not launch the full application. See [troubleshooting](docs/troubleshooting.md) for discovery checks.
 
-The plugin manifest overrides Seroval to `^1.6.9` because OpenTUI's required
+The plugin manifest overrides Seroval to `~1.6.11` because OpenTUI's required
 Solid version otherwise resolves a vulnerable `~1.5.x` serializer. Keep this
 override until the upstream dependency constraint includes a patched version;
 verify changes with `npm audit` and the TUI renderer check.
