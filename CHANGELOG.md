@@ -10,8 +10,9 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
   cover `1.5.5–1.6.10`, so the previous floor resolved inside the affected
   range and the required `Dependency audit` check failed. A lockfile-only
   bump would not move the tree past the override, so package.json and the
-  lockfile change together; verified with `npm ci`, `npm audit` (0
-  vulnerabilities) and the TUI check.
+  lockfile change together; the consumer override guidance in `plugin/README.md`
+  and `CONTRIBUTING.md` follows the new floor. Verified with `npm ci`, `npm audit`
+  (0 vulnerabilities) and the TUI check.
 - Bound the tunnel name in the collapsed summary to 20 columns (elided with
   `…`) so a long hostname cannot push the reachability state out of the
   header, and replace the nested ternary the reachability state was built

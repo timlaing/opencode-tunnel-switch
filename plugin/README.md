@@ -87,7 +87,7 @@ The REST token is separate from GitHub registry credentials. Proxy IP/port are d
 ## Serializer dependency
 
 OpenTUI currently requires a Solid version that constrains Seroval to a vulnerable
-release range. This checkout overrides Seroval to `^1.6.9` and audits that resolved
+release range. This checkout overrides Seroval to `~1.6.11` and audits that resolved
 tree. npm applies overrides only from the installing root project: applications
 installing this package must also enforce a patched Seroval version in their root
 dependency configuration. This package's override does not patch OpenCode's own
