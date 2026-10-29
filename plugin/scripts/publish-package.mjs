@@ -4,7 +4,7 @@ import { assertPublishedMatches, expectedRepositoryUrl, probeVersion, readPackFr
 const [pack] = readPackFromStdin();
 const baseSettings = retrySettings();
 
-// Job-wide deadline: 15 minutes from start (before preflight)
+// Job-wide deadline: 15 minutes from start (BEFORE preflight)
 const jobStart = Date.now();
 const JOB_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 const jobDeadline = jobStart + JOB_TIMEOUT_MS;
@@ -18,9 +18,10 @@ const jobDeadline = jobStart + JOB_TIMEOUT_MS;
 // The shared probe answers a missing version immediately but retries
 // transient failures (rate limits, registry hiccups) within the bounded
 // budget instead of failing the publish before anything was uploaded.
+// Preflight uses the job deadline, reserving time for later phases.
 const preflightSettings = createDeadlineSettings(baseSettings, jobStart, JOB_TIMEOUT_MS);
 const targets = targetRegistries.map(({ registry, access, provenance }) => {
-  // Reserve 1 minute per remaining registry for preflight probes
+  // Reserve time for remaining registries' preflight probes (1 min each)
   const remaining = targetRegistries.filter(t => t.registry !== registry).length;
   const reservedMs = remaining * 60000;
   const existing = probeVersion(registry, pack, preflightSettings, reservedMs);
@@ -72,8 +73,15 @@ for (const { registry, provenance, integrity, repository, attestation } of targe
 // bounded by the job deadline.
 const terminal = terminalStdio();
 const uploadDeadline = Math.min(jobDeadline, jobStart + 600000); // 10 minutes total for both uploads
-for (const { registry, access, provenance, args, integrity } of targets) {
+
+// Reserve time for recovery readbacks: 1 minute per registry that needs upload
+const registriesNeedingUpload = targets.filter(t => t.integrity === null).length;
+const recoveryReservedMs = registriesNeedingUpload * 60000;
+
+for (let i = 0; i < targets.length; i++) {
+  const { registry, access, provenance, args, integrity } = targets[i];
   if (integrity !== null) continue;
+  
   // Outside GitHub Actions, npm (provenance=true) cannot produce attestation.
   // Skip the upload but STILL verify via readback that the version is present
   // and attested on npmjs. If nothing is staged, the readback will fail.
@@ -81,6 +89,7 @@ for (const { registry, access, provenance, args, integrity } of targets) {
   if (skipUpload) {
     console.log(`Skipping npm upload outside GitHub Actions (no OIDC token for provenance); will verify via readback.`);
   }
+  
   // --provenance is CI-only (it needs the Actions OIDC token) and npmjs-only
   // (GitHub Packages does not accept provenance attestations).
   const attest = provenance && process.env.GITHUB_ACTIONS === "true" ? ["--provenance"] : [];
@@ -88,7 +97,11 @@ for (const { registry, access, provenance, args, integrity } of targets) {
   if (!skipUpload) {
     // Shared upload timeout: remaining time in the 10-minute budget, bounded by job deadline.
     const uploadTimeout = Math.max(1000, Math.min(uploadDeadline, jobDeadline) - Date.now());
-    const uploadOptions = terminal ?? { encoding: "utf8", maxBuffer: 1024 * 1024 * 10, timeout: uploadTimeout };
+    // For terminal-backed uploads, merge the calculated timeout into the options
+    // so interactive uploads also respect the shared budget.
+    const uploadOptions = terminal
+      ? { ...terminal, timeout: Math.max(1000, Math.min(uploadTimeout, terminal.timeout ?? Infinity)) }
+      : { encoding: "utf8", maxBuffer: 1024 * 1024 * 10, timeout: uploadTimeout };
     const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], uploadOptions);
     if (!terminal) {
       if (upload.stdout) process.stdout.write(upload.stdout);
@@ -98,11 +111,11 @@ for (const { registry, access, provenance, args, integrity } of targets) {
     // Upload failed (or timed out). Fall through to verification readback.
   }
   
-  // Verification readback: use job deadline, reserve time for remaining registries.
-  const remainingRegistries = targets.filter(t => t.integrity === null && t.registry !== registry).length;
-  const reservedForRemaining = remainingRegistries * 60000;
-  const verifyDeadline = jobDeadline - reservedForRemaining;
-  const verifySettings = { ...preflightSettings, stepDeadline: verifyDeadline };
+  // Verification readback for failed upload: use job deadline, reserve time for recovery of other failed uploads.
+  const remainingRegistries = targets.slice(i + 1).filter(t => t.integrity === null).length;
+  const verifyReservedMs = remainingRegistries * 60000 + recoveryReservedMs;
+  const verifyDeadline = jobDeadline - verifyReservedMs;
+  const verifySettings = { ...baseSettings, stepDeadline: Math.min(jobDeadline, verifyDeadline) };
   
   try {
     const published = readPublishedVersion(registry, pack, verifySettings);

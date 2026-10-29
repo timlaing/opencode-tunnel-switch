@@ -156,7 +156,8 @@ if (process.argv.includes('dist.integrity')) {
 }
 // After a tolerated staged conflict the earlier upload surfaces: the first
 // read still propagates (E404), then the staged document is served —
-// matching, divergent or unattested per the fixture.
+// matching, divergent or unattested per the fixture. This applies to both
+// the preflight probe (dist.integrity) and the post-upload readback verification (view --json).
 if (isNpmjs && publishMode && publishMode.startsWith('staged')) {
   let n = 0;
   try { n = Number(fs.readFileSync(process.env.TEST_NPM_COUNT, 'utf8') || 0); } catch {}
@@ -177,6 +178,28 @@ if (isNpmjs && publishMode && publishMode.startsWith('staged')) {
     repository: { url: 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
   }));
   process.exit(0);
+}
+// For readback verification after successful upload (view --json), serve the
+// staged document if the staged version has already surfaced (counter > 0).
+// This applies to both npmjs and GitHub Packages.
+if (publishMode && publishMode.startsWith('staged') && process.argv.includes('--json')) {
+  try { 
+    const n = Number(fs.readFileSync(process.env.TEST_NPM_COUNT, 'utf8') || 0); 
+    if (n > 0) {
+      console.log(JSON.stringify({
+        name: '@timlaing/opencode-tunnel-switch',
+        version: '0.1.0',
+        dist: {
+          integrity: publishMode === 'staged-diverges' ? 'sha512-other' : 'sha512-tested',
+          ...(publishMode === 'staged-unattested' ? {} : {
+            attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing/opencode-tunnel-switch@0.1.0' },
+          }),
+        },
+        repository: { url: 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+      }));
+      process.exit(0);
+    }
+  } catch {}
 }
 console.log(JSON.stringify({ error: { code: 'E404' } }));
 process.exit(1);
