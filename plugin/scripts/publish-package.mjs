@@ -55,48 +55,68 @@ for (const { registry, provenance, integrity, repository, attestation } of targe
 // something unverified.
 //
 // Outside GitHub Actions, npm uploads require provenance (OIDC). If provenance
-// cannot be produced, skip the upload and rely on readback verification of an
-// already-staged attested version. This prevents an immutable, partially
-// verified release.
+// cannot be produced, skip the upload but STILL verify via readback that the
+// version is present and attested on npmjs. This prevents an immutable,
+// partially verified release.
 //
 // Upload timeout is shared across both registries (total 10 minutes) so the
 // combined upload time stays within the job limit. A stalled interactive
 // publish also gets this timeout via terminalStdio().
 //
-// When upload fails, verification readback gets its own fresh deadline
-// starting after the failure, so a staged version that becomes readable after
-// the step deadline is still recoverable.
+// The entire publish step (preflight + uploads + verifications) is bounded by
+// the GitHub Actions job timeout (15 minutes). All readback verifications
+// use the step deadline, not a fresh one, so total time stays within limit.
+const stepStart = Date.now();
+const JOB_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const stepDeadline = stepStart + JOB_TIMEOUT_MS;
 const terminal = terminalStdio();
-const uploadDeadline = Date.now() + 600000; // 10 minutes total for both uploads
+
+// Upload timeout is shared across both registries (total 10 minutes) but also
+// bounded by the step deadline.
+const uploadDeadline = Math.min(stepDeadline, stepStart + 600000); // 10 minutes
+
 for (const { registry, access, provenance, args, integrity } of targets) {
   if (integrity !== null) continue;
   // Outside GitHub Actions, npm (provenance=true) cannot produce attestation.
-  // Skip the upload and let readback verification handle an already-staged
-  // attested version. If nothing is staged, the readback will fail appropriately.
-  if (provenance && process.env.GITHUB_ACTIONS !== "true") {
+  // Skip the upload but STILL verify via readback that the version is present
+  // and attested on npmjs. If nothing is staged, the readback will fail.
+  const skipUpload = provenance && process.env.GITHUB_ACTIONS !== "true";
+  if (skipUpload) {
     console.log(`Skipping npm upload outside GitHub Actions (no OIDC token for provenance); will verify via readback.`);
-    continue;
   }
   // --provenance is CI-only (it needs the Actions OIDC token) and npmjs-only
   // (GitHub Packages does not accept provenance attestations).
   const attest = provenance && process.env.GITHUB_ACTIONS === "true" ? ["--provenance"] : [];
-  // Shared upload timeout: remaining time in the 10-minute budget.
-  const uploadTimeout = Math.max(1000, uploadDeadline - Date.now());
-  const uploadOptions = terminal ?? { encoding: "utf8", maxBuffer: 1024 * 1024 * 10, timeout: uploadTimeout };
-  const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], uploadOptions);
-  if (!terminal) {
-    if (upload.stdout) process.stdout.write(upload.stdout);
-    if (upload.stderr) process.stderr.write(upload.stderr);
+  
+  if (!skipUpload) {
+    // Shared upload timeout: remaining time in the 10-minute budget, bounded by step deadline.
+    const uploadTimeout = Math.max(1000, Math.min(uploadDeadline, stepDeadline) - Date.now());
+    const uploadOptions = terminal ?? { encoding: "utf8", maxBuffer: 1024 * 1024 * 10, timeout: uploadTimeout };
+    const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], uploadOptions);
+    if (!terminal) {
+      if (upload.stdout) process.stdout.write(upload.stdout);
+      if (upload.stderr) process.stderr.write(upload.stderr);
+    }
+    if (upload.status === 0) continue;
+    // Upload failed (or timed out). Fall through to verification readback.
   }
-  if (upload.status === 0) continue;
-  // Upload failed (or timed out). Use a FRESH deadline for verification
-  // readback starting NOW, so a staged version that becomes readable after
-  // the preflight/upload deadline is still recoverable.
-  const verifySettings = retrySettings();
+  
+  // Verification readback: use step deadline (not fresh) so total time stays within job limit.
+  // Compute per-read budget that reserves time for remaining registries.
+  const remainingRegistries = targets.filter(t => t.integrity === null && t.registry !== registry).length;
+  const minReservedPerRegistry = 60000; // 1 minute minimum per remaining registry
+  const reservedForRemaining = remainingRegistries * minReservedPerRegistry;
+  const readDeadline = Math.min(stepDeadline - reservedForRemaining, Date.now() + settings.perReadBudget);
+  const verifySettings = { ...settings, stepDeadline: readDeadline };
+  
   try {
     const published = readPublishedVersion(registry, pack, verifySettings);
     assertPublishedMatches(pack, published, registry, provenance);
-    console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive after a failed upload; an earlier publish attempt already landed it, no upload required.`);
+    if (skipUpload) {
+      console.log(`${pack.name}@${pack.version} on ${registry} verified via readback (no upload performed outside CI).`);
+    } else {
+      console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive after a failed upload; an earlier publish attempt already landed it, no upload required.`);
+    }
     continue;
   } catch (error_) {
     throw new Error(`Package upload to ${registry} failed; ${error_.message}`);

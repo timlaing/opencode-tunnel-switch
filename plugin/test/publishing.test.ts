@@ -10,8 +10,9 @@ const script = fileURLToPath(new URL("../scripts/publish-package.mjs", import.me
 const scenarios = {
   // per-registry state of the tested version: missing | same | badrepo | different | unauthorized | unattested
   // Outside GitHub Actions, npm uploads are skipped (no OIDC for provenance);
-  // only GitHub Packages upload is attempted. CI tests use GITHUB_ACTIONS=true.
-  missing: { npmjs: "missing", gh: "missing", publishes: 1, status: 0 },
+  // npmjs is verified via readback — if missing, the publish fails.
+  // CI tests use GITHUB_ACTIONS=true.
+  missing: { npmjs: "missing", gh: "missing", publishes: 0, status: 1 },
   same: { npmjs: "same", gh: "same", publishes: 0, status: 0 },
   different: { npmjs: "different", gh: "same", publishes: 0, status: 1 },
   // Matching integrity with wrong repository metadata must also abort early.
@@ -25,7 +26,7 @@ const scenarios = {
   "gh-diverges": { npmjs: "missing", gh: "different", publishes: 0, status: 1 },
   // npm can exit 0 with empty stdout for a missing version; that must count
   // as "missing here" (probe-then-publish uploads), never as a parse crash.
-  "empty-output": { npmjs: "empty", gh: "empty", publishes: 1, status: 0 },
+  "empty-output": { npmjs: "empty", gh: "empty", publishes: 0, status: 1 },
 } as const;
 for (const [scenario, expected] of Object.entries(scenarios)) {
   test(`publishing handles ${scenario} versions without unsafe overwrite`, () => {
@@ -94,6 +95,9 @@ console.log(JSON.stringify({
         assert.ok(github.includes("--access=restricted"));
         const archive = path.join(realpathSync(directory), "package.tgz");
         assert.ok(github.includes(archive), `GitHub publish must upload ${archive}`);
+      } else if (publishCount === 0) {
+        // Expected failure: npmjs readback failed, no uploads attempted.
+        // Nothing to assert here.
       }
       // Now assert the count matches expectations.
       assert.equal(publishCount, expected.publishes, result.stderr);
@@ -200,6 +204,8 @@ process.exit(1);
     const staged = run("staged");
     assert.equal(staged.status, 0, staged.stderr);
     assert.match(staged.stdout, /matches the tested archive/);
+    // The staged-version warning from npm must appear in captured stderr.
+    assert.match(staged.stderr, /Cannot publish over previously staged version/);
     const stagedUploads = publishes();
     assert.equal(stagedUploads.length, 2, "npm must be attempted and GitHub Packages uploaded after the verified conflict");
     assert.ok(stagedUploads[0].includes("--registry=https://registry.npmjs.org"));
