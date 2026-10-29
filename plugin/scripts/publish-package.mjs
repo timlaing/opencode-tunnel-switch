@@ -1,8 +1,13 @@
 import path from "node:path";
-import { assertPublishedMatches, expectedRepositoryUrl, probeVersion, readPackFromStdin, readPublishedVersion, registryArgs, retrySettings, runNpm, targetRegistries, terminalStdio } from "./npm-cli.mjs";
+import { assertPublishedMatches, expectedRepositoryUrl, probeVersion, readPackFromStdin, readPublishedVersion, registryArgs, retrySettings, createDeadlineSettings, runNpm, targetRegistries, terminalStdio } from "./npm-cli.mjs";
 
 const [pack] = readPackFromStdin();
-const settings = retrySettings();
+const baseSettings = retrySettings();
+
+// Job-wide deadline: 15 minutes from start (before preflight)
+const jobStart = Date.now();
+const JOB_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const jobDeadline = jobStart + JOB_TIMEOUT_MS;
 
 // Probe every registry before uploading to any. Published versions are
 // immutable, so a version that lands on one registry with contents the other
@@ -13,8 +18,12 @@ const settings = retrySettings();
 // The shared probe answers a missing version immediately but retries
 // transient failures (rate limits, registry hiccups) within the bounded
 // budget instead of failing the publish before anything was uploaded.
+const preflightSettings = createDeadlineSettings(baseSettings, jobStart, JOB_TIMEOUT_MS);
 const targets = targetRegistries.map(({ registry, access, provenance }) => {
-  const existing = probeVersion(registry, pack, settings);
+  // Reserve 1 minute per remaining registry for preflight probes
+  const remaining = targetRegistries.filter(t => t.registry !== registry).length;
+  const reservedMs = remaining * 60000;
+  const existing = probeVersion(registry, pack, preflightSettings, reservedMs);
   return {
     registry, access, provenance, args: registryArgs(registry, pack.name),
     integrity: existing?.["dist.integrity"] ?? null,
@@ -59,22 +68,10 @@ for (const { registry, provenance, integrity, repository, attestation } of targe
 // version is present and attested on npmjs. This prevents an immutable,
 // partially verified release.
 //
-// Upload timeout is shared across both registries (total 10 minutes) so the
-// combined upload time stays within the job limit. A stalled interactive
-// publish also gets this timeout via terminalStdio().
-//
-// The entire publish step (preflight + uploads + verifications) is bounded by
-// the GitHub Actions job timeout (15 minutes). All readback verifications
-// use the step deadline, not a fresh one, so total time stays within limit.
-const stepStart = Date.now();
-const JOB_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
-const stepDeadline = stepStart + JOB_TIMEOUT_MS;
-const terminal = terminalStdio();
-
 // Upload timeout is shared across both registries (total 10 minutes) but also
-// bounded by the step deadline.
-const uploadDeadline = Math.min(stepDeadline, stepStart + 600000); // 10 minutes
-
+// bounded by the job deadline.
+const terminal = terminalStdio();
+const uploadDeadline = Math.min(jobDeadline, jobStart + 600000); // 10 minutes total for both uploads
 for (const { registry, access, provenance, args, integrity } of targets) {
   if (integrity !== null) continue;
   // Outside GitHub Actions, npm (provenance=true) cannot produce attestation.
@@ -89,8 +86,8 @@ for (const { registry, access, provenance, args, integrity } of targets) {
   const attest = provenance && process.env.GITHUB_ACTIONS === "true" ? ["--provenance"] : [];
   
   if (!skipUpload) {
-    // Shared upload timeout: remaining time in the 10-minute budget, bounded by step deadline.
-    const uploadTimeout = Math.max(1000, Math.min(uploadDeadline, stepDeadline) - Date.now());
+    // Shared upload timeout: remaining time in the 10-minute budget, bounded by job deadline.
+    const uploadTimeout = Math.max(1000, Math.min(uploadDeadline, jobDeadline) - Date.now());
     const uploadOptions = terminal ?? { encoding: "utf8", maxBuffer: 1024 * 1024 * 10, timeout: uploadTimeout };
     const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], uploadOptions);
     if (!terminal) {
@@ -101,13 +98,11 @@ for (const { registry, access, provenance, args, integrity } of targets) {
     // Upload failed (or timed out). Fall through to verification readback.
   }
   
-  // Verification readback: use step deadline (not fresh) so total time stays within job limit.
-  // Compute per-read budget that reserves time for remaining registries.
+  // Verification readback: use job deadline, reserve time for remaining registries.
   const remainingRegistries = targets.filter(t => t.integrity === null && t.registry !== registry).length;
-  const minReservedPerRegistry = 60000; // 1 minute minimum per remaining registry
-  const reservedForRemaining = remainingRegistries * minReservedPerRegistry;
-  const readDeadline = Math.min(stepDeadline - reservedForRemaining, Date.now() + settings.perReadBudget);
-  const verifySettings = { ...settings, stepDeadline: readDeadline };
+  const reservedForRemaining = remainingRegistries * 60000;
+  const verifyDeadline = jobDeadline - reservedForRemaining;
+  const verifySettings = { ...preflightSettings, stepDeadline: verifyDeadline };
   
   try {
     const published = readPublishedVersion(registry, pack, verifySettings);

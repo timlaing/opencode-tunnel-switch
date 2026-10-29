@@ -67,15 +67,14 @@ export const expectedRepositoryUrl = "git+https://github.com/timlaing/opencode-t
  * anything else falls back to the default rather than risking a retry loop
  * whose bound never matches (NaN === NaN is false).
  *
- * The returned object includes a `stepDeadline` (total budget for this
- * script run) and `perReadBudget` (budget per registry read). Each registry
- * read gets its own deadline = min(stepDeadline, Date.now() + perReadBudget)
- * so later reads retain a fair share even if earlier reads consumed much of
- * the step budget. The step budget is capped at 7 minutes so the publish
- * step and the separate verify step can both finish within GitHub Actions'
- * 15-minute job timeout. A zero-delay configuration (tests, ad-hoc local
- * runs) bounds by attempt count with a per-call timeout of 30s so a stalled
- * read cannot hang forever. */
+ * The returned budgets describe how much time one script run may spend on
+ * registry reads. The CALLER must provide a `jobStart` (or `jobDeadline`)
+ * to anchor the deadlines in real time. Each registry read gets a budget of
+ * `perReadBudget`, and the total run is capped at `stepBudget`. The step
+ * budget is capped at 7 minutes so the publish step and the separate verify
+ * step can both finish within GitHub Actions' 15-minute job timeout. A
+ * zero-delay configuration (tests, ad-hoc local runs) bounds by attempt
+ * count with a per-call timeout of 30s so a stalled read cannot hang forever. */
 export function retrySettings() {
   const requestedAttempts = Number.parseInt(process.env.VERIFY_ATTEMPTS ?? "", 10);
   const attempts = Number.isInteger(requestedAttempts) && requestedAttempts > 0 ? requestedAttempts : 5;
@@ -86,8 +85,14 @@ export function retrySettings() {
   const perReadBudget = retryDelayMs > 0 ? attempts * (retryDelayMs + maxHintMs) : Infinity;
   // Step budget: cap at 7 minutes (420s) so publish + verify steps fit in 15m job timeout
   const stepBudget = retryDelayMs > 0 ? Math.min(perReadBudget * 2, 420000) : Infinity;
-  const stepDeadline = retryDelayMs > 0 ? Date.now() + stepBudget : Infinity;
-  return { attempts, retryDelayMs, perReadBudget, stepDeadline };
+  return { attempts, retryDelayMs, perReadBudget, stepBudget };
+}
+
+/** Create deadline settings anchored to a job start time. */
+export function createDeadlineSettings(baseSettings, jobStart, jobBudget) {
+  const stepBudget = Math.min(baseSettings.stepBudget, jobBudget);
+  const stepDeadline = jobStart + stepBudget;
+  return { ...baseSettings, stepDeadline, stepBudget };
 }
 
 /** A freshly published version can lag on a registry's read path (npm stages
@@ -124,9 +129,9 @@ const waitMs = (error, retryDelayMs) => {
 /** Run npm view with a per-call timeout derived from the step deadline.
  * Returns the parsed JSON document once a non-empty body is served. */
 const PER_CALL_TIMEOUT_MS = 30000; // 30s per call when no deadline
-export function readPublishedVersion(registry, pack, settings) {
+export function readPublishedVersion(registry, pack, settings, reservedMs = 0) {
   const { attempts, retryDelayMs, perReadBudget, stepDeadline } = settings;
-  const readDeadline = Math.min(stepDeadline, Date.now() + perReadBudget);
+  const readDeadline = Math.min(stepDeadline - reservedMs, Date.now() + perReadBudget);
   for (let attempt = 1; ; attempt++) {
     const remaining = readDeadline - Date.now();
     if (remaining <= 0)
@@ -185,9 +190,9 @@ function handleProbeResult(result, registry, attempt, attempts, readDeadline, re
   return undefined; // signal to retry
 }
 
-export function probeVersion(registry, pack, settings) {
+export function probeVersion(registry, pack, settings, reservedMs = 0) {
   const { attempts, retryDelayMs, perReadBudget, stepDeadline } = settings;
-  const readDeadline = Math.min(stepDeadline, Date.now() + perReadBudget);
+  const readDeadline = Math.min(stepDeadline - reservedMs, Date.now() + perReadBudget);
   for (let attempt = 1; ; attempt++) {
     const remaining = readDeadline - Date.now();
     if (remaining <= 0)
