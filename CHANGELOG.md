@@ -22,11 +22,28 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
   stays unreadable past the bound aborts exactly like a probe mismatch, so
   one registry can never receive an unretractable upload while another
   holds a staged version that was never checked. Only the exact staged
-  conflict is tolerated (an unrelated `E409` still aborts), and interactive
-  runs keep the terminal on npm's stdio so an OTP or login prompt keeps
-  working — conflict detection needs the captured error text, which only
-  the non-interactive CI path (OIDC trusted publishing, no prompts)
-  collects.
+  conflict is tolerated (an unrelated `E409` still aborts). The publish
+  step in the workflow gets the same 11 attempts × 10s window as readback
+  for that wait instead of the helper's 15s default. Interactive runs keep
+  npm's stdio on the attached terminal so an OTP or login prompt keeps
+  working — pack JSON arrives on stdin, so stdin is never a terminal;
+  interactivity is judged by the attached terminal instead, and npm reads
+  prompts from the controlling terminal — while conflict detection needs
+  the captured error text, which only the non-interactive CI path (OIDC
+  trusted publishing, no prompts) collects.
+- Apply the provenance gate to already-readable versions in the publish
+  preflight as well, not only at readback: the probe now queries
+  `dist.attestations.url` alongside integrity and repository metadata (npm
+  projects field paths client-side, so an unattested version simply lacks
+  the key), and a version that reached npm without a signed attestation
+  aborts before another registry receives an unretractable upload — a
+  staged-unattested run that is retried once the version surfaces would
+  otherwise slip through preflight on its integrity match alone.
+- Treat rate-limited reads (`E429`) as transient in the shared bounded
+  reader instead of aborting on the first one, honouring a `Retry-After`
+  hint from the error body when present (seconds, capped at 60s per
+  attempt) so a rate limit during the staged-version wait or readback
+  retries within the existing bound.
 
 ## [1.5.0] - 2026-10-29
 

@@ -14,6 +14,20 @@ export function runNpm(args, options = {}) {
   return spawnSync(node && path.isAbsolute(node) ? node : process.execPath, [cli, ...args], options);
 }
 
+/** stdio options for an interactive upload (a maintainer publishing from a
+ * terminal), or null when no terminal is attached (CI, piped logs). npm must
+ * keep the terminal to prompt for an OTP or a login — but pack JSON arrives
+ * on stdin, so stdin itself is never a terminal: the consumed pipe is
+ * replaced with the controlling terminal where one exists. Without a
+ * terminal the caller captures npm's output instead, so upload failures can
+ * be classified from npm's error text. */
+export function terminalStdio() {
+  if (!process.stderr.isTTY && !process.stdout.isTTY) return null;
+  let stdin = 0;
+  try { stdin = fs.openSync("/dev/tty", "r"); } catch { /* fall back to the consumed pipe */ }
+  return { stdio: [stdin, "inherit", "inherit"] };
+}
+
 /** npm resolves a scope's registry from the `@scope:registry` config before
  * the plain `--registry` flag, so a maintainer's `~/.npmrc` scope mapping
  * silently redirects scoped publishes to the mapped registry. Force the
@@ -52,10 +66,11 @@ export function retrySettings() {
 
 /** A freshly published version can lag on a registry's read path (npm stages
  * a publish before exposing it; GitHub Packages reads are eventually
- * consistent), so reads retry transient failures for a bounded period
- * instead of failing a successful upload. Returns the parsed document once
- * a non-empty body is served. */
-const transientCodes = new Set(["E404", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN"]);
+ * consistent), and a rate-limited read can arrive while it propagates, so
+ * reads retry transient failures for a bounded period instead of failing a
+ * successful upload. Returns the parsed document once a non-empty body is
+ * served. */
+const transientCodes = new Set(["E404", "E429", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN"]);
 const sleep = (ms) => ms > 0 && Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 export function readPublishedVersion(registry, pack, { attempts, retryDelayMs }) {
   let result;
@@ -70,7 +85,12 @@ export function readPublishedVersion(registry, pack, { attempts, retryDelayMs })
     const transient = !error || transientCodes.has(error.code) || /^E5\d\d$/.test(error.code ?? "");
     if (!transient || attempt === attempts)
       throw new Error(`Cannot read back the published package from ${registry} after ${attempt} attempt(s); check registry authentication, propagation and connectivity.`);
-    sleep(retryDelayMs);
+    // A rate-limited read can carry its own Retry-After (seconds); honour it
+    // when present, capped so a hostile or malformed header cannot stall the
+    // run past a minute per attempt.
+    const retryAfter = Number(error?.retryAfter);
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 60) * 1000 : retryDelayMs;
+    sleep(wait);
   }
 }
 

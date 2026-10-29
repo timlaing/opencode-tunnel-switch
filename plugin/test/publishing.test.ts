@@ -8,13 +8,17 @@ import { fileURLToPath } from "node:url";
 
 const script = fileURLToPath(new URL("../scripts/publish-package.mjs", import.meta.url));
 const scenarios = {
-  // per-registry state of the tested version: missing | same | badrepo | different | unauthorized
+  // per-registry state of the tested version: missing | same | badrepo | different | unauthorized | unattested
   missing: { npmjs: "missing", gh: "missing", publishes: 2, status: 0 },
   same: { npmjs: "same", gh: "same", publishes: 0, status: 0 },
   different: { npmjs: "different", gh: "same", publishes: 0, status: 1 },
   // Matching integrity with wrong repository metadata must also abort early.
   "bad-repository": { npmjs: "badrepo", gh: "missing", publishes: 0, status: 1 },
   unauthorized: { npmjs: "unauthorized", gh: "missing", publishes: 0, status: 1 },
+  // A readable but unattested npm version must abort in preflight too: the
+  // readback would only catch it after GitHub Packages had already received
+  // an unretractable upload.
+  unattested: { npmjs: "unattested", gh: "missing", publishes: 0, status: 1 },
   // GH divergence must abort before anything is uploaded to npm.
   "gh-diverges": { npmjs: "missing", gh: "different", publishes: 0, status: 1 },
   // npm can exit 0 with empty stdout for a missing version; that must count
@@ -30,17 +34,23 @@ for (const [scenario, expected] of Object.entries(scenarios)) {
 const fs = require('node:fs');
 fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
 if (process.argv[2] === 'publish') process.exit(0);
-const state = process.env[process.argv.includes('--registry=https://registry.npmjs.org') ? 'TEST_NPM_NPMJS' : 'TEST_NPM_GH'];
+const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+const state = process.env[isNpmjs ? 'TEST_NPM_NPMJS' : 'TEST_NPM_GH'];
 // npm's missing-version quirk: exit 0 with no output at all.
 if (state === 'empty') process.exit(0);
 if (state === 'missing' || state === 'unauthorized') {
   console.log(JSON.stringify({ error: { code: state === 'missing' ? 'E404' : 'E401' } }));
   process.exit(1);
 }
-// npm view with multiple fields returns flat dotted keys.
+// npm view with multiple fields returns flat dotted keys. npm projects field
+// paths client-side: a version without attestations simply lacks the key,
+// and only npm (not GitHub Packages) is expected to carry one.
 console.log(JSON.stringify({
   'dist.integrity': state === 'same' || state === 'badrepo' ? 'sha512-tested' : 'sha512-different',
   'repository.url': state === 'badrepo' ? 'git+https://github.com/example/other.git' : 'git+https://github.com/timlaing/opencode-tunnel-switch.git',
+  ...(isNpmjs && state !== 'unattested'
+    ? { 'dist.attestations.url': 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing%2fopencode-tunnel-switch@0.1.0' }
+    : {}),
 }));
 `, { mode: 0o755 });
     try {
@@ -305,6 +315,12 @@ if (process.env.TEST_NPM_READBACK === 'always-404' || (process.env.TEST_NPM_READ
   console.log(JSON.stringify({ error: { code: 'E404' } }));
   process.exit(1);
 }
+// A rate-limited read during propagation must be retried within the bound;
+// a Retry-After (seconds) in the body is honoured when present.
+if (process.env.TEST_NPM_READBACK === 'rate-limited' && n === 0) {
+  console.log(JSON.stringify({ error: { code: 'E429', retryAfter: 0.001 } }));
+  process.exit(1);
+}
 console.log(${JSON.stringify(JSON.stringify(published))});
 `, { mode: 0o755 });
   const run = (mode: string, attempts = "3") => spawnSync(process.execPath, [verifyScript], {
@@ -327,6 +343,12 @@ console.log(${JSON.stringify(JSON.stringify(published))});
     const empty = run("empty-once");
     assert.equal(empty.status, 0, empty.stderr);
     assert.equal(views().length, 3, "an empty first readback must be retried, not parsed");
+    rmSync(log); rmSync(count);
+    // A rate-limited read (E429) is transient as well and must be retried
+    // within the same bound, honouring the body's Retry-After hint.
+    const limited = run("rate-limited");
+    assert.equal(limited.status, 0, limited.stderr);
+    assert.equal(views().length, 3, "a rate-limited first readback must be retried");
     rmSync(log); rmSync(count);
     // A persistent 404 must stop after the configured attempt bound.
     const persistent = run("always-404");
