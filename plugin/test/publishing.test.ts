@@ -418,8 +418,10 @@ console.log(${JSON.stringify(JSON.stringify(published))});
     // Retry-After hint (400ms), not the 100ms configured delay: a hint
     // honoured wall-clock run is >= ~350ms, while a hint ignored would
     // finish near 100ms; the cap keeps it well under 2s either way.
+    // Use 10 attempts so the shared deadline (2 × 10 × 100ms = 2000ms)
+    // leaves enough budget for the second registry after the 400ms hint wait.
     const started = Date.now();
-    const limited = run("rate-limited", "3", "100");
+    const limited = run("rate-limited", "10", "100");
     const elapsed = Date.now() - started;
     assert.equal(limited.status, 0, limited.stderr);
     assert.equal(views().length, 3, "a rate-limited first readback must be retried");
