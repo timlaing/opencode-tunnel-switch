@@ -153,6 +153,30 @@ export function readPublishedVersion(registry, pack, settings) {
  * An existing version that lacks dist.integrity is treated as incomplete
  * metadata — reject before any upload so an unverifiable artifact never
  * lands. */
+function handleProbeResult(result, registry, attempt, attempts, deadline, retryDelayMs) {
+  // npm exits 0 with empty output when the package exists but the
+  // queried version does not; both empty and E404 mean "missing here".
+  if (result.status === 0) {
+    if (!result.stdout.trim()) return null;
+    const doc = JSON.parse(result.stdout);
+    // Version exists but is missing dist.integrity — incomplete metadata;
+    // reject before upload so the run never ships an unverifiable artifact.
+    if (!doc["dist.integrity"])
+      throw new Error(`Package version on ${registry} is missing dist.integrity; incomplete metadata — refusing to upload.`);
+    return doc;
+  }
+  let error;
+  try { error = JSON.parse(result.stdout).error; } catch {}
+  if (result.error?.code === "ETIMEDOUT") error = { code: "ETIMEDOUT" };
+  if (error?.code === "E404")
+    return null;
+  if (!isTransient(error, result.status) || attempt === attempts)
+    throw new Error(`Cannot determine whether the package version exists on ${registry}; check registry authentication and connectivity.`);
+  warnRetry(registry, error);
+  sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, deadline - Date.now())));
+  return undefined; // signal to retry
+}
+
 export function probeVersion(registry, pack, settings) {
   const { attempts, retryDelayMs, deadline } = settings;
   for (let attempt = 1; ; attempt++) {
@@ -163,26 +187,8 @@ export function probeVersion(registry, pack, settings) {
       ["view", `${pack.name}@${pack.version}`, "dist.integrity", "repository.url", "dist.attestations.url", "--json", ...registryArgs(registry, pack.name)],
       { encoding: "utf8", timeout: Number.isFinite(remaining) ? remaining : undefined }
     );
-    // npm exits 0 with empty output when the package exists but the
-    // queried version does not; both empty and E404 mean "missing here".
-    if (result.status === 0) {
-      if (!result.stdout.trim()) return null;
-      const doc = JSON.parse(result.stdout);
-      // Version exists but is missing dist.integrity — incomplete metadata;
-      // reject before upload so the run never ships an unverifiable artifact.
-      if (!doc["dist.integrity"])
-        throw new Error(`Package version on ${registry} is missing dist.integrity; incomplete metadata — refusing to upload.`);
-      return doc;
-    }
-    let error;
-    try { error = JSON.parse(result.stdout).error; } catch {}
-    if (result.error?.code === "ETIMEDOUT") error = { code: "ETIMEDOUT" };
-    if (error?.code === "E404")
-      return null;
-    if (!isTransient(error, result.status) || attempt === attempts)
-      throw new Error(`Cannot determine whether the package version exists on ${registry}; check registry authentication and connectivity.`);
-    warnRetry(registry, error);
-    sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, deadline - Date.now())));
+    const handled = handleProbeResult(result, registry, attempt, attempts, deadline, retryDelayMs);
+    if (handled !== undefined) return handled;
   }
 }
 
