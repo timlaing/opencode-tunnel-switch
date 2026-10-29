@@ -1,7 +1,8 @@
 import path from "node:path";
-import { assertPublishedMatches, expectedRepositoryUrl, readPackFromStdin, readPublishedVersion, registryArgs, retrySettings, runNpm, targetRegistries, terminalStdio } from "./npm-cli.mjs";
+import { assertPublishedMatches, expectedRepositoryUrl, probeVersion, readPackFromStdin, readPublishedVersion, registryArgs, retrySettings, runNpm, targetRegistries, terminalStdio } from "./npm-cli.mjs";
 
 const [pack] = readPackFromStdin();
+const settings = retrySettings();
 
 // Probe every registry before uploading to any. Published versions are
 // immutable, so a version that lands on one registry with contents the other
@@ -9,23 +10,17 @@ const [pack] = readPackFromStdin();
 // mismatch, a missing attestation or an unreadable registry therefore aborts
 // before any upload. npm projects field paths client-side, so a version
 // without attestations simply lacks the dist.attestations.url key (exit 0).
+// The shared probe answers a missing version immediately but retries
+// transient failures (rate limits, registry hiccups) within the bounded
+// budget instead of failing the publish before anything was uploaded.
 const targets = targetRegistries.map(({ registry, access, provenance }) => {
-  const args = registryArgs(registry, pack.name);
-  const result = runNpm(["view", `${pack.name}@${pack.version}`, "dist.integrity", "repository.url", "dist.attestations.url", "--json", ...args], { encoding: "utf8" });
-  if (result.status === 0) {
-    // npm can exit 0 with empty output when the package exists but the
-    // queried version does not; treat that as a missing version rather than
-    // letting JSON.parse throw before either registry is probed.
-    if (!result.stdout.trim())
-      return { registry, access, provenance, args, integrity: null, repository: null, attestation: null };
-    const existing = JSON.parse(result.stdout);
-    return { registry, access, provenance, args, integrity: existing["dist.integrity"], repository: existing["repository.url"], attestation: existing["dist.attestations.url"] };
-  }
-  let error;
-  try { error = JSON.parse(result.stdout).error; } catch {}
-  if (error?.code !== "E404")
-    throw new Error(`Cannot determine whether the package version exists on ${registry}; check registry authentication and connectivity.`);
-  return { registry, access, provenance, args, integrity: null, repository: null, attestation: null };
+  const existing = probeVersion(registry, pack, settings);
+  return {
+    registry, access, provenance, args: registryArgs(registry, pack.name),
+    integrity: existing?.["dist.integrity"] ?? null,
+    repository: existing?.["repository.url"] ?? null,
+    attestation: existing?.["dist.attestations.url"] ?? null,
+  };
 });
 
 for (const { registry, provenance, integrity, repository, attestation } of targets) {
@@ -46,41 +41,43 @@ for (const { registry, provenance, integrity, repository, attestation } of targe
 // Every registry is either already consistent or missing the version; upload.
 // A rerun after a partial failure converges: published registries are skipped
 // on their integrity match and the missing one is retried.
-// The staged-version conflict below is only recognisable from npm's error
-// text, so a non-interactive run (CI, where OIDC trusted publishing needs no
-// prompt) captures the upload output and replays it — while a maintainer
-// publishing from a terminal keeps npm's stdio on that terminal so npm can
-// prompt for an OTP or a login.
+// An upload can fail even though this exact artifact already landed: npm
+// stages a publish before its read path serves it, GitHub Packages reads are
+// eventually consistent, and a probe that ran before the staged version
+// surfaced reports "missing". Never classify by npm's error wording or code
+// (they differ per registry and per npm version); instead read the failed
+// registry back — bounded by the same retry settings as the readback — and
+// continue only when it holds the exact tested artifact: integrity,
+// repository linkage and the provenance attestation. A mismatch, an
+// unattested version or a registry that stays unreadable past the bound
+// keeps the failure (wrapped together with the upload error), so no
+// remaining registry receives an unretractable upload while another holds
+// something unverified. This path also works for interactive runs: the
+// verification spawns its own captured npm calls, independent of the
+// upload's stdio, so a maintainer rerunning from a terminal after npm
+// staged the version converges instead of seeing a raw failure.
 const terminal = terminalStdio();
-const stagedRetry = retrySettings();
 for (const { registry, access, provenance, args, integrity } of targets) {
   if (integrity !== null) continue;
   // --provenance is CI-only (it needs the Actions OIDC token) and npmjs-only
   // (GitHub Packages does not accept provenance attestations).
   const attest = provenance && process.env.GITHUB_ACTIONS === "true" ? ["--provenance"] : [];
+  // A non-interactive run (CI, where OIDC trusted publishing needs no prompt)
+  // captures npm's output and replays it for the CI log; a maintainer
+  // publishing from a terminal keeps npm's stdio on that terminal so npm can
+  // prompt for an OTP or a login.
   const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], terminal ?? { encoding: "utf8" });
   if (!terminal) {
     if (upload.stdout) process.stdout.write(upload.stdout);
     if (upload.stderr) process.stderr.write(upload.stderr);
   }
   if (upload.status === 0) continue;
-  // npm accepts a publish into a staging area and only later exposes the
-  // version on the read path. A rerun inside that window probes the version
-  // as missing (E404 or an empty view) and re-uploads, which npm rejects
-  // with E409 for the version it already staged — the earlier upload is in
-  // flight, not failed. Published versions are immutable, so before any
-  // remaining registry receives its own unretractable upload, wait for the
-  // staged version to surface (bounded by the same retry settings as the
-  // readback) and verify it against the tested artifact: integrity,
-  // repository linkage and the provenance attestation. A mismatch, or a
-  // version that stays unreadable past the bound, aborts here exactly like
-  // the probe mismatch above. Any other upload failure aborts too.
-  if (!terminal && /E409/.test(upload.stderr) && /previously staged version/.test(upload.stderr)) {
-    console.log(`${pack.name}@${pack.version} is already staged on ${registry} by an earlier publish attempt; verifying it against the tested artifact before uploading to the remaining registries.`);
-    const published = readPublishedVersion(registry, pack, stagedRetry);
+  try {
+    const published = readPublishedVersion(registry, pack, settings);
     assertPublishedMatches(pack, published, registry, provenance);
-    console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive; no upload required.`);
+    console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive after a failed upload; an earlier publish attempt already landed it, no upload required.`);
     continue;
+  } catch (verifyFailure) {
+    throw new Error(`Package upload to ${registry} failed; ${verifyFailure.message}`);
   }
-  throw new Error(`Package upload to ${registry} failed`);
 }

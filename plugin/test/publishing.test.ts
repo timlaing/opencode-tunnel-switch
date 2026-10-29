@@ -44,9 +44,11 @@ if (state === 'missing' || state === 'unauthorized') {
 }
 // npm view with multiple fields returns flat dotted keys. npm projects field
 // paths client-side: a version without attestations simply lacks the key,
-// and only npm (not GitHub Packages) is expected to carry one.
+// and only npm (not GitHub Packages) is expected to carry one. The
+// unattested fixture carries the TESTED integrity on purpose so it fails on
+// the attestation gate itself, never on the integrity check.
 console.log(JSON.stringify({
-  'dist.integrity': state === 'same' || state === 'badrepo' ? 'sha512-tested' : 'sha512-different',
+  'dist.integrity': state === 'same' || state === 'badrepo' || state === 'unattested' ? 'sha512-tested' : 'sha512-different',
   'repository.url': state === 'badrepo' ? 'git+https://github.com/example/other.git' : 'git+https://github.com/timlaing/opencode-tunnel-switch.git',
   ...(isNpmjs && state !== 'unattested'
     ? { 'dist.attestations.url': 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing%2fopencode-tunnel-switch@0.1.0' }
@@ -63,6 +65,11 @@ console.log(JSON.stringify({
       const calls = readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
       if (expected.status === 0) assert.equal(result.status, 0, result.stderr);
       else assert.notEqual(result.status, 0);
+      // The unattested fixture carries the tested integrity, so it must be
+      // rejected by the provenance gate specifically — a silent pass through
+      // to the integrity check would hide a removed attestation gate.
+      if (scenario === "unattested")
+        assert.match(result.stderr, /no signed provenance attestation/, "the unattested case must fail on the attestation gate, not on integrity");
       const publishes = calls.filter((args) => args[0] === "publish");
       assert.equal(publishes.length, expected.publishes, result.stderr);
       if (expected.publishes === 2) {
@@ -116,6 +123,14 @@ if (process.argv[2] === 'publish') {
   if (publishMode === 'e409-unrelated') {
     console.error('npm error code E409');
     console.error('npm error 409 Conflict - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - You cannot publish over the previously published versions.');
+    process.exit(1);
+  }
+  if (publishMode === 'worded-conflict') {
+    // The staged-version wording under a non-E409 code: classification must
+    // come from reading the registry back, never from matching npm's text —
+    // and the registry here never surfaces the version, so this must fail.
+    console.error('npm error code E403');
+    console.error('npm error 403 Forbidden - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - Cannot publish over previously staged version "0.1.0".');
     process.exit(1);
   }
   process.exit(0);
@@ -191,17 +206,69 @@ process.exit(1);
     assert.notEqual(unattested.status, 0);
     assert.match(unattested.stderr, /no signed provenance attestation/);
     assert.equal(publishes().length, 1, "an unattested staged version must stop the loop at the first registry");
-    // An unrelated upload failure keeps the old behaviour: abort immediately.
+    // A real upload failure (no artifact landed): the verification readback
+    // finds nothing published, so the run keeps the upload failure and stops
+    // before the second registry.
     const forbidden = run("forbidden");
     assert.notEqual(forbidden.status, 0);
     assert.match(forbidden.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
     assert.equal(publishes().length, 1, "a real upload failure must stop the loop");
-    // A bare E409 without the staged-version wording is unrelated too: only
-    // the exact staged conflict is tolerated, never every 409.
+    // Neither an unrelated E409 nor its wording decides: classification is
+    // the readback. This registry never surfaces the version, so both fail.
     const unrelated = run("e409-unrelated");
     assert.notEqual(unrelated.status, 0);
     assert.match(unrelated.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
     assert.equal(publishes().length, 1, "an unrelated E409 must stop the loop");
+    // The staged-version wording under a non-E409 code must not be tolerated
+    // either — wording is never matched; with nothing readable to verify,
+    // this failure stands.
+    const worded = run("worded-conflict");
+    assert.notEqual(worded.status, 0);
+    assert.match(worded.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
+    assert.equal(publishes().length, 1, "staged wording without a landed artifact must stop the loop");
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("the preflight probe retries rate limits instead of aborting the publish", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-probe-retry-test-"));
+  const log = path.join(directory, "calls.jsonl");
+  const count = path.join(directory, "count");
+  const manifest = JSON.stringify([{ name: "@timlaing/opencode-tunnel-switch", version: "0.1.0", filename: "package.tgz", integrity: "sha512-tested" }]);
+  writeFileSync(path.join(directory, "npm-cli.cjs"), `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
+const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+if (process.argv[2] === 'publish') process.exit(0);
+// The first npm probe is rate-limited before the version can be answered;
+// the shared bounded probe must retry it and then see the version missing.
+if (process.argv.includes('dist.integrity')) {
+  let n = 0;
+  try { n = Number(fs.readFileSync(process.env.TEST_NPM_COUNT, 'utf8') || 0); } catch {}
+  fs.writeFileSync(process.env.TEST_NPM_COUNT, String(n + 1));
+  if (isNpmjs && n === 0) {
+    console.log(JSON.stringify({ error: { code: 'E429', retryAfter: 0 } }));
+    process.exit(1);
+  }
+}
+console.log(JSON.stringify({ error: { code: 'E404' } }));
+process.exit(1);
+`, { mode: 0o755 });
+  try {
+    const result = spawnSync(process.execPath, [script], {
+      cwd: directory, encoding: "utf8", input: manifest,
+      env: {
+        ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"),
+        TEST_NPM_LOG: log, TEST_NPM_COUNT: count, VERIFY_ATTEMPTS: "3", VERIFY_RETRY_DELAY_MS: "0",
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const calls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
+      .map((line) => JSON.parse(line) as string[]);
+    const probes = calls.filter((args) => args.includes("dist.integrity"));
+    const publishes = calls.filter((args) => args[0] === "publish");
+    // npm probed twice (one rate-limited retry), GitHub Packages once.
+    assert.equal(probes.length, 3, "the rate-limited npm probe must be retried within the bound");
+    assert.equal(publishes.length, 2, "a rate-limited probe must not abort the publish before any upload");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -316,19 +383,21 @@ if (process.env.TEST_NPM_READBACK === 'always-404' || (process.env.TEST_NPM_READ
   process.exit(1);
 }
 // A rate-limited read during propagation must be retried within the bound;
-// a Retry-After (seconds) in the body is honoured when present.
+// the Retry-After (seconds) in the body must be honoured instead of the
+// configured delay — 0.4s here against a 100ms configured delay, asserted
+// through elapsed wall-clock time below.
 if (process.env.TEST_NPM_READBACK === 'rate-limited' && n === 0) {
-  console.log(JSON.stringify({ error: { code: 'E429', retryAfter: 0.001 } }));
+  console.log(JSON.stringify({ error: { code: 'E429', retryAfter: 0.4 } }));
   process.exit(1);
 }
 console.log(${JSON.stringify(JSON.stringify(published))});
 `, { mode: 0o755 });
-  const run = (mode: string, attempts = "3") => spawnSync(process.execPath, [verifyScript], {
+  const run = (mode: string, attempts = "3", delay = "0") => spawnSync(process.execPath, [verifyScript], {
     encoding: "utf8", input: manifest,
     env: {
       ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"),
       TEST_NPM_LOG: log, TEST_NPM_COUNT: count, TEST_NPM_READBACK: mode,
-      VERIFY_ATTEMPTS: attempts, VERIFY_RETRY_DELAY_MS: "0",
+      VERIFY_ATTEMPTS: attempts, VERIFY_RETRY_DELAY_MS: delay,
     },
   });
   const views = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean);
@@ -345,10 +414,17 @@ console.log(${JSON.stringify(JSON.stringify(published))});
     assert.equal(views().length, 3, "an empty first readback must be retried, not parsed");
     rmSync(log); rmSync(count);
     // A rate-limited read (E429) is transient as well and must be retried
-    // within the same bound, honouring the body's Retry-After hint.
-    const limited = run("rate-limited");
+    // within the same bound — and the wait must come from the body's
+    // Retry-After hint (400ms), not the 100ms configured delay: a hint
+    // honoured wall-clock run is >= ~350ms, while a hint ignored would
+    // finish near 100ms; the cap keeps it well under 2s either way.
+    const started = Date.now();
+    const limited = run("rate-limited", "3", "100");
+    const elapsed = Date.now() - started;
     assert.equal(limited.status, 0, limited.stderr);
     assert.equal(views().length, 3, "a rate-limited first readback must be retried");
+    assert.ok(elapsed >= 350, `Retry-After hint must be honoured (took ${elapsed}ms, expected >= ~400ms rather than the 100ms configured delay)`);
+    assert.ok(elapsed < 2000, `Retry-After waits must stay bounded (took ${elapsed}ms)`);
     rmSync(log); rmSync(count);
     // A persistent 404 must stop after the configured attempt bound.
     const persistent = run("always-404");

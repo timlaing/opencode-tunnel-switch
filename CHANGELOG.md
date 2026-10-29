@@ -5,32 +5,32 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
-- Treat npm's `E409` "Cannot publish over previously staged version" during
-  upload as "staged by an earlier publish attempt" instead of failing the
-  publish step — but only after verifying it. npm accepts a publish into a
-  staging area and only later exposes the version on its read path, so a
-  `workflow_dispatch` rerun inside that window probes the version as
-  missing (E404 or an empty view) and the re-upload collides with the
-  version npm already staged — the 1.5.0 release hit exactly this after
-  the release-triggered run lost the propagation race, and the rerun failed
-  at upload instead of at readback. Because published versions are
-  immutable, the helper now waits for the staged version to surface
-  (bounded by the same `VERIFY_ATTEMPTS`/`VERIFY_RETRY_DELAY_MS` settings
-  as the readback, sharing its reader) and verifies it against the tested
-  artifact — integrity, repository linkage and the provenance attestation —
-  before uploading to any remaining registry; a mismatch or a version that
-  stays unreadable past the bound aborts exactly like a probe mismatch, so
-  one registry can never receive an unretractable upload while another
-  holds a staged version that was never checked. Only the exact staged
-  conflict is tolerated (an unrelated `E409` still aborts). The publish
-  step in the workflow gets the same 11 attempts × 10s window as readback
-  for that wait instead of the helper's 15s default. Interactive runs keep
-  npm's stdio on the attached terminal so an OTP or login prompt keeps
-  working — pack JSON arrives on stdin, so stdin is never a terminal;
-  interactivity is judged by the attached terminal instead, and npm reads
-  prompts from the controlling terminal — while conflict detection needs
-  the captured error text, which only the non-interactive CI path (OIDC
-  trusted publishing, no prompts) collects.
+- Recover from npm's staged-version publish conflict by verifying instead of
+  matching error text. npm accepts a publish into a staging area and only
+  later exposes the version on its read path, so a `workflow_dispatch` rerun
+  inside that window probes the version as missing (E404 or an empty view)
+  and the re-upload collides with the version npm already staged — the 1.5.0
+  release hit exactly this after the release-triggered run lost the
+  propagation race, and the rerun failed at upload instead of at readback.
+  Because published versions are immutable, any upload failure now triggers
+  the same bounded readback (sharing the reader and
+  `VERIFY_ATTEMPTS`/`VERIFY_RETRY_DELAY_MS` settings as the verify step) and
+  the run continues only when that registry holds the exact tested artifact —
+  integrity, repository linkage and the provenance attestation. Nothing is
+  classified from npm's error codes or wording (an unrelated `E409`, the
+  staged wording under a foreign code, and a GitHub Packages failure all take
+  the same path), a mismatch or a version that stays unreadable past the
+  bound keeps the failure wrapped with the upload error, so no remaining
+  registry ever receives an unretractable upload while another holds
+  something unverified. The publish step in the workflow gets the same
+  11 attempts × 10s window as readback for that wait instead of the helper's
+  15s default. Interactive runs keep npm's stdio on the attached terminal so
+  an OTP or login prompt keeps working: pack JSON arrives on stdin, so stdin
+  is never a terminal — interactivity is judged by the attached terminal and
+  npm reads prompts from the controlling terminal device (`/dev/tty`, or
+  `CONIN$` on Windows), falling back to captured output when no terminal
+  input device can be opened rather than handing npm the already-consumed
+  stdin pipe.
 - Apply the provenance gate to already-readable versions in the publish
   preflight as well, not only at readback: the probe now queries
   `dist.attestations.url` alongside integrity and repository metadata (npm
@@ -39,11 +39,13 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
   aborts before another registry receives an unretractable upload — a
   staged-unattested run that is retried once the version surfaces would
   otherwise slip through preflight on its integrity match alone.
-- Treat rate-limited reads (`E429`) as transient in the shared bounded
-  reader instead of aborting on the first one, honouring a `Retry-After`
-  hint from the error body when present (seconds, capped at 60s per
-  attempt) so a rate limit during the staged-version wait or readback
-  retries within the existing bound.
+- Retry transient failures in the preflight probe as well as the readback:
+  a rate limit (`E429`) or registry hiccup while probing no longer aborts
+  the publish before anything was uploaded. Both shared readers honour a
+  `Retry-After` hint from the error body when present (seconds, capped at
+  60s per attempt) and enforce a wall-clock deadline of twice the configured
+  window per read, so hint waits cannot multiply into the workflow's
+  15-minute job timeout.
 
 ## [1.5.0] - 2026-10-29
 

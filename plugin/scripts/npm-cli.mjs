@@ -18,14 +18,17 @@ export function runNpm(args, options = {}) {
  * terminal), or null when no terminal is attached (CI, piped logs). npm must
  * keep the terminal to prompt for an OTP or a login — but pack JSON arrives
  * on stdin, so stdin itself is never a terminal: the consumed pipe is
- * replaced with the controlling terminal where one exists. Without a
- * terminal the caller captures npm's output instead, so upload failures can
- * be classified from npm's error text. */
+ * replaced with the controlling terminal input device (`/dev/tty` on Unix,
+ * `CONIN$` on Windows) where one exists. When neither can be opened there is
+ * no prompt source at all, so callers fall back to capturing npm's output
+ * instead of handing npm the already-consumed stdin pipe (which would read
+ * EOF instead of the prompt response). */
 export function terminalStdio() {
   if (!process.stderr.isTTY && !process.stdout.isTTY) return null;
-  let stdin = 0;
-  try { stdin = fs.openSync("/dev/tty", "r"); } catch { /* fall back to the consumed pipe */ }
-  return { stdio: [stdin, "inherit", "inherit"] };
+  for (const device of ["/dev/tty", "CONIN$"]) {
+    try { return { stdio: [fs.openSync(device, "r"), "inherit", "inherit"] }; } catch { /* try the next device */ }
+  }
+  return null;
 }
 
 /** npm resolves a scope's registry from the `@scope:registry` config before
@@ -72,7 +75,25 @@ export function retrySettings() {
  * served. */
 const transientCodes = new Set(["E404", "E429", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN"]);
 const sleep = (ms) => ms > 0 && Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-export function readPublishedVersion(registry, pack, { attempts, retryDelayMs }) {
+const isTransient = (error) => !error || transientCodes.has(error.code) || /^E5\d\d$/.test(error.code ?? "");
+/** A rate-limited read can carry its own Retry-After (seconds); honour it
+ * when present, capped at a minute so a hostile or malformed hint cannot
+ * stall a single attempt — the overall budget is enforced by the caller. */
+const waitMs = (error, retryDelayMs) => {
+  const retryAfter = Number(error?.retryAfter);
+  return Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 60) * 1000 : retryDelayMs;
+};
+/** Wall-clock budget for one bounded read: twice the configured window
+ * (attempts × retryDelayMs) — one window for configured-delay waits, one for
+ * Retry-After-driven waits — so hint waits of up to a minute each cannot
+ * multiply into the workflow's 15-minute job timeout. Worst case for the
+ * full two-registry readback is 4 × attempts × retryDelayMs: 440s for the
+ * workflow's 11 × 10s, 60s for the local 5 × 3s defaults. A zero-delay
+ * configuration (tests, ad-hoc local runs) bounds by attempt count alone. */
+const readDeadline = ({ attempts, retryDelayMs }) => retryDelayMs > 0 ? Date.now() + 2 * attempts * retryDelayMs : Infinity;
+export function readPublishedVersion(registry, pack, settings) {
+  const { attempts, retryDelayMs } = settings;
+  const deadline = readDeadline(settings);
   let result;
   for (let attempt = 1; ; attempt++) {
     result = runNpm(["view", `${pack.name}@${pack.version}`, "--json", ...registryArgs(registry, pack.name)], { encoding: "utf8" });
@@ -82,15 +103,35 @@ export function readPublishedVersion(registry, pack, { attempts, retryDelayMs })
       return JSON.parse(result.stdout);
     let error;
     try { error = JSON.parse(result.stdout).error; } catch {}
-    const transient = !error || transientCodes.has(error.code) || /^E5\d\d$/.test(error.code ?? "");
-    if (!transient || attempt === attempts)
+    if (!isTransient(error) || attempt === attempts)
       throw new Error(`Cannot read back the published package from ${registry} after ${attempt} attempt(s); check registry authentication, propagation and connectivity.`);
-    // A rate-limited read can carry its own Retry-After (seconds); honour it
-    // when present, capped so a hostile or malformed header cannot stall the
-    // run past a minute per attempt.
-    const retryAfter = Number(error?.retryAfter);
-    const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 60) * 1000 : retryDelayMs;
-    sleep(wait);
+    sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, deadline - Date.now())));
+  }
+}
+
+/** Preflight probe for one registry: returns the flat-key field document
+ * (dist.integrity, repository.url, dist.attestations.url) for an existing
+ * version, or null when the version is missing. A missing version (E404 or
+ * npm's empty-exit-0 view) answers immediately — it must proceed to upload —
+ * while transient failures such as rate limits retry within the same bounded
+ * budget and message style as the readback instead of aborting the publish.
+ * Non-transient errors (auth, malformed input) still fail fast. */
+export function probeVersion(registry, pack, settings) {
+  const { attempts, retryDelayMs } = settings;
+  const deadline = readDeadline(settings);
+  for (let attempt = 1; ; attempt++) {
+    const result = runNpm(["view", `${pack.name}@${pack.version}`, "dist.integrity", "repository.url", "dist.attestations.url", "--json", ...registryArgs(registry, pack.name)], { encoding: "utf8" });
+    // npm can exit 0 with empty output when the package exists but the
+    // queried version does not; both empty and E404 mean "missing here".
+    if (result.status === 0)
+      return result.stdout.trim() ? JSON.parse(result.stdout) : null;
+    let error;
+    try { error = JSON.parse(result.stdout).error; } catch {}
+    if (error?.code === "E404")
+      return null;
+    if (!isTransient(error) || attempt === attempts)
+      throw new Error(`Cannot determine whether the package version exists on ${registry}; check registry authentication and connectivity.`);
+    sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, deadline - Date.now())));
   }
 }
 
