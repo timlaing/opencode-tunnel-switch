@@ -73,6 +73,11 @@ console.log(JSON.stringify({
       // to the integrity check would hide a removed attestation gate.
       if (scenario === "unattested")
         assert.match(result.stderr, /no signed provenance attestation/, "the unattested case must fail on the attestation gate, not on integrity");
+      // The empty-output fixture must fail on the readback verification
+      // (version missing after upload), not on a JSON parse error during
+      // the preflight probe.
+      if (scenario === "empty-output")
+        assert.match(result.stderr, /Cannot read back the published package/, "empty-output must fail on readback verification, not preflight parse error");
       const publishes = calls.filter((args) => args[0] === "publish");
       const publishCount = publishes.length;
       // Check publish details first (before assertion narrows the type).
