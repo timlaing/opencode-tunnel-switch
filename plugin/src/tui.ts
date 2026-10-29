@@ -100,11 +100,13 @@ export default Plugin.define({
     const positive = themed(["text", "feedback", "success", "base"], "#a6e3a1");
     const warning = themed(["text", "feedback", "warning", "base"], "#f9e2af");
     const negative = themed(["text", "feedback", "error", "base"], "#f38ba8");
-    // A row: white label left, value flush right (grey or state-coloured),
-    // matching the MCP sidebar's label/value layout.
+    // A row: bold title in the theme's base colour, two-space indented and
+    // without a colon; value flush right (muted or state-coloured), matching
+    // the sibling sidebars' label/value layout.
     const line = (label: string, value: string | (() => string), colour?: string, suffix?: string) =>
       jsx("box", { flexDirection: "row", gap: 1, minWidth: 0, get children() { return [
-        jsx("text", { fg: base, wrapMode: "none", truncate: true, flexGrow: 1, flexShrink: 1, minWidth: 0, children: `${label}:` }),
+        jsx("text", { fg: base, wrapMode: "none", truncate: true, flexGrow: 1, flexShrink: 1, minWidth: 0,
+          get children() { return jsx("b", { children: `  ${label}` }); } }),
         jsx("text", { wrapMode: "none", truncate: true, flexShrink: 0, get children() {
           const children = [jsx("span", {
             style: { fg: colour ?? muted },
@@ -114,10 +116,20 @@ export default Plugin.define({
           return children;
         } }),
       ]; } });
-    // Muted summary shown beside "Tunnel" while the sidebar is collapsed.
-    const collapsedSummary = (checked: number | undefined, available: boolean): string => {
-      if (!checked) return " (checking…)";
-      return available ? " (reachable)" : " (unavailable)";
+    // Muted summary shown beside "Tunnel" while the sidebar is collapsed,
+    // naming the tunnel (its configured server) once one has been reported.
+    // The name is capped so a long hostname cannot push the reachability
+    // state out of the collapsed header.
+    /** Keep a server name within 20 columns, elided with an ellipsis. */
+    const clipName = (name: string): string => (name.length <= 20 ? name : `${name.slice(0, 19)}…`);
+    const collapsedSummary = (name: string | null | undefined, checked: number | undefined,
+      available: boolean): string => {
+      let reach: string;
+      if (!checked) reach = "checking…";
+      else if (available) reach = "reachable";
+      else reach = "unavailable";
+      if (!name) return ` (${reach})`;
+      return ` (${clipName(name)} · ${reach})`;
     };
     // Feedback colour for a tunnel state.
     const stateColour = (state: TunnelStatus["state"]): string => {
@@ -153,7 +165,7 @@ export default Plugin.define({
                 jsx("text", { fg: base, get children() {
                   const children = [jsx("b", { children: "Tunnel" })];
                   if (!open) children.push(jsx("span", { style: { fg: muted },
-                    children: collapsedSummary(checked, available) }));
+                    children: collapsedSummary(status?.server, checked, available) }));
                   return children;
                 } }),
               ]; } });
@@ -172,7 +184,8 @@ export default Plugin.define({
                   line("Proxy", status.proxy),
                 );
               }
-              lines.push(line("Checked", () => formatAge(checked, clock())));
+              // The relative age stays muted (the default value colour) between polls.
+              lines.push(line("Checked", () => formatAge(checked, clock()), muted));
               return [header, ...lines];
             } });
           } catch {

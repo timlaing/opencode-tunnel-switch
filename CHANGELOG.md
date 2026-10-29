@@ -5,6 +5,31 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+- Raise the seroval override floor from `^1.6.9` to `~1.6.11` (resolving
+  1.6.12): GHSA-f86p-h4j2-7qgj/GHSA-9wx9-5pv9-3349 were later extended to
+  cover `1.5.5–1.6.10`, so the previous floor resolved inside the affected
+  range and the required `Dependency audit` check failed. A lockfile-only
+  bump would not move the tree past the override, so package.json and the
+  lockfile change together; verified with `npm ci`, `npm audit` (0
+  vulnerabilities) and the TUI check.
+- Bound the tunnel name in the collapsed summary to 20 columns (elided with
+  `…`) so a long hostname cannot push the reachability state out of the
+  header, and replace the nested ternary the reachability state was built
+  with (SonarQube typescript:S3358) with plain branches — both raised on
+  the collapsed-summary change.
+- Restyle the Tunnel sidebar rows to match the sibling TUI plugins: row
+  titles are now bold in the theme's base colour, prefixed by two spaces and
+  no longer suffixed with a colon; the tunnel heading keeps `text.base`.
+  The relative "Checked" age is pinned explicitly to the theme's muted
+  colour. `captureSpans()` assertions now guard the scheme end to end: bold
+  base titles, muted values elsewhere, and API/State values resolved from
+  the theme's `feedback.success`/`feedback.warning`/`feedback.error` palette
+  — reachable/connected green, rotating amber, unavailable/disconnected red
+  — with the no-feedback-theme fallbacks pinned alongside.
+- Name the tunnel in the sidebar's collapsed summary: while collapsed the
+  header now reads `▶ Tunnel (<server> · reachable)` — using the configured
+  server name from the last status response, and falling back to the bare
+  `(reachable)`/`(unavailable)`/`(checking…)` state when no name is known.
 - Raise the CI readback bound to 11 attempts × 10s — ten retry intervals,
   ~100s between the first and last read (`VERIFY_ATTEMPTS`,
   `VERIFY_RETRY_DELAY_MS` on the `Publish plugin` verify step). The first

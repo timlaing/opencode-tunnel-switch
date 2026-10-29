@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { TextAttributes } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 import type { Context, KeymapLayer, SlotClaim } from "@opencode/plugin/tui/context";
 import plugin from "../src/tui.js";
@@ -43,13 +44,16 @@ interface Harness {
   readonly dispose: () => void;
 }
 
-async function start(options: Record<string, unknown>): Promise<Harness> {
+const FALLBACK_THEME = { text: { base: "#ffffff", muted: "#aaaaaa" } };
+
+async function start(options: Record<string, unknown>,
+  theme: Record<string, unknown> = FALLBACK_THEME): Promise<Harness> {
   const claims: SlotClaim[] = [];
   const layers: KeymapLayer[] = [];
   const toasts: Array<Record<string, unknown>> = [];
   const cleanup = await plugin.setup({
     options,
-    theme: { text: { base: "#ffffff", muted: "#aaaaaa" } },
+    theme,
     ui: {
       slot(claim: SlotClaim) { claims.push(claim); return () => {}; },
       toast: { show(value: Record<string, unknown>) { toasts.push(value); } },
@@ -69,9 +73,46 @@ async function openView(claim: SlotClaim): Promise<View> {
 }
 
 function row(frame: string, label: string): string {
-  const match = frame.split("\n").find((candidate) => candidate.includes(`${label}:`));
+  const match = frame.split("\n").find((candidate) => candidate.startsWith(`  ${label}`));
   assert.ok(match, `missing ${label} row`);
   return match.trimEnd();
+}
+
+/** Hex of a captured span's foreground (the renderer stores 0–1 floats). */
+function hex(fg: { r: number; g: number; b: number }): string {
+  return `#${[fg.r, fg.g, fg.b].map((part) => Math.round(part * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function span(view: View, text: string) {
+  const match = view.captureSpans().lines.flatMap((line) => line.spans)
+    .find((candidate) => candidate.text === text);
+  assert.ok(match, `missing span ${JSON.stringify(text)}`);
+  return match;
+}
+
+/**
+ * Pin the sidebar's colour scheme: bold base titles, feedback-coloured
+ * API/State values, muted values elsewhere (theme fallbacks, since the
+ * harness theme declares no feedback colours).
+ */
+function assertColours(view: View): void {
+  const spans = view.captureSpans().lines.flatMap((line) => line.spans);
+  const span = (text: string) => {
+    const match = spans.find((candidate) => candidate.text === text);
+    assert.ok(match, `missing span ${JSON.stringify(text)}`);
+    return match;
+  };
+  assert.equal(hex(span("Tunnel").fg), "#ffffff");
+  assert.ok(span("Tunnel").attributes & TextAttributes.BOLD, "heading must be bold");
+  for (const title of ["  API", "  State", "  Server", "  Checked"]) {
+    assert.equal(hex(span(title).fg), "#ffffff", title);
+    assert.ok(span(title).attributes & TextAttributes.BOLD, title);
+  }
+  assert.equal(hex(span("reachable").fg), "#a6e3a1");
+  assert.equal(hex(span("connected").fg), "#a6e3a1");
+  for (const value of ["example-server", "0s ago"]) {
+    assert.equal(hex(span(value).fg), "#aaaaaa", value);
+  }
 }
 
 function reset(next: { mode?: typeof mode; server?: string | null; state?: string } = {}): void {
@@ -101,6 +142,7 @@ test("tunnel-switch sidebar", async (t) => {
           assert.ok(row(frame, "Checked").endsWith("0s ago"), row(frame, "Checked"));
           assert.doesNotMatch(frame, /ID:|test-token|private-error/);
           assert.ok(calls.every((call) => call === "GET /status"));
+          assertColours(view);
         } finally {
           view.renderer.destroy();
         }
@@ -118,12 +160,13 @@ test("tunnel-switch sidebar", async (t) => {
         try {
           await view.renderOnce();
           assert.ok(row(view.captureCharFrame(), "State").endsWith("rotating"));
+          assert.equal(hex(span(view, "rotating").fg), "#f9e2af");
           // The toggle handler is intentionally synchronous.
           await h.layer?.commands?.[1].run();
           await view.renderOnce();
           const collapsed = view.captureCharFrame();
-          assert.match(collapsed, /▶ Tunnel \(reachable\)/);
-          assert.doesNotMatch(collapsed, /Server:/);
+          assert.match(collapsed, /▶ Tunnel \(example-server · reachable\)/);
+          assert.doesNotMatch(collapsed, /Server/);
           await h.layer?.commands?.[1].run();
           await view.renderOnce();
           assert.ok(row(view.captureCharFrame(), "Server").endsWith("example-server"));
@@ -146,6 +189,52 @@ test("tunnel-switch sidebar", async (t) => {
           const frame = view.captureCharFrame();
           assert.ok(row(frame, "State").endsWith("disconnected"), row(frame, "State"));
           assert.doesNotMatch(frame, /\(last known\)/);
+          assert.equal(hex(span(view, "disconnected").fg), "#f38ba8");
+        } finally {
+          view.renderer.destroy();
+        }
+      } finally {
+        h.dispose();
+      }
+    });
+
+    await t.test("resolves API/State colours from the theme feedback palette", async () => {
+      reset();
+      const h = await start({ apiToken: "test-token" }, {
+        text: {
+          base: "#ffffff", muted: "#aaaaaa",
+          feedback: {
+            success: { base: "#00ff00" },
+            warning: { base: "#ffff00" },
+            error: { base: "#ff0000" },
+          },
+        },
+      });
+      try {
+        await h.layer?.commands?.[0].run();
+        const view = await openView(h.claim!);
+        try {
+          await view.renderOnce();
+          // reachable/connected → text.feedback.success.base
+          assert.equal(hex(span(view, "reachable").fg), "#00ff00");
+          assert.equal(hex(span(view, "connected").fg), "#00ff00");
+          assert.equal(hex(span(view, "0s ago").fg), "#aaaaaa", "values ignore the palette");
+          // rotating → text.feedback.warning.base
+          state = "rotating";
+          await h.layer?.commands?.[0].run();
+          await view.renderOnce();
+          assert.equal(hex(span(view, "rotating").fg), "#ffff00");
+          // unavailable → text.feedback.error.base (state rows go stale)
+          mode = "fail";
+          await h.layer?.commands?.[0].run();
+          await view.renderOnce();
+          assert.equal(hex(span(view, "unavailable").fg), "#ff0000");
+          // disconnected → text.feedback.error.base
+          mode = "ok";
+          state = "disconnected";
+          await h.layer?.commands?.[0].run();
+          await view.renderOnce();
+          assert.equal(hex(span(view, "disconnected").fg), "#ff0000");
         } finally {
           view.renderer.destroy();
         }
@@ -169,9 +258,10 @@ test("tunnel-switch sidebar", async (t) => {
           assert.ok(row(frame, "State").endsWith("(last known)"), row(frame, "State"));
           assert.ok(row(frame, "Uptime").endsWith("(at last success)"), row(frame, "Uptime"));
           assert.doesNotMatch(frame, /private-error|test-token/);
+          assert.equal(hex(span(view, "unavailable").fg), "#f38ba8");
           await h.layer?.commands?.[1].run();
           await view.renderOnce();
-          assert.match(view.captureCharFrame(), /▶ Tunnel \(unavailable\)/);
+          assert.match(view.captureCharFrame(), /▶ Tunnel \(example-server · unavailable\)/);
         } finally {
           view.renderer.destroy();
         }
@@ -208,6 +298,33 @@ test("tunnel-switch sidebar", async (t) => {
         try {
           await view.renderOnce();
           assert.ok(row(view.captureCharFrame(), "Server").endsWith("—"));
+          // Without a tunnel name the collapsed summary falls back to the state only.
+          await h.layer?.commands?.[1].run();
+          await view.renderOnce();
+          assert.match(view.captureCharFrame(), /▶ Tunnel \(reachable\)/);
+        } finally {
+          view.renderer.destroy();
+        }
+      } finally {
+        h.dispose();
+      }
+    });
+
+    await t.test("clips a long tunnel name so the state stays visible", async () => {
+      reset({ server: "a-very-long-server-name-that-overflows-the-sidebar" });
+      const h = await start({ apiToken: "test-token" });
+      try {
+        await h.layer?.commands?.[0].run();
+        const view = await openView(h.claim!);
+        try {
+          await view.renderOnce();
+          await h.layer?.commands?.[1].run();
+          await view.renderOnce();
+          const collapsed = view.captureCharFrame();
+          assert.match(collapsed, /▶ Tunnel \(a-very-long-server-… · reachable\)/);
+          const summary = view.captureSpans().lines.flatMap((line) => line.spans)
+            .find((candidate) => candidate.text.includes("· reachable"));
+          assert.ok(summary, "reachability state must stay in the collapsed header");
         } finally {
           view.renderer.destroy();
         }

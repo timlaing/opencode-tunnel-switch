@@ -7,9 +7,11 @@ The external [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch) 
 After a successful tunnel switch, the plugin requests that OpenCode retry the current model request after one second, continuing the existing work automatically. Status display runs independently so a slow or failed notification cannot delay continuation. If a switch returns 429 (for example, another switch is already in progress), only the current work request is retried after `Retry-After`; the switch is not retried in that retry sequence. A local cooldown similarly delays the work request until it expires. Other switch failures stop the retry, and OpenCode's retry limit still applies.
 
 The OpenCode session sidebar also includes a **Tunnel** section with connection
-state, server, ID, start time, uptime, proxy address and API availability. It
-refreshes every five seconds; `/tunnel-refresh` refreshes immediately. Failed
-checks mark previous details stale. Reload OpenCode after updating the plugin.
+state, server, start time, uptime, proxy address and API availability. While
+collapsed, the header still names the tunnel and its reachability, for example
+`▶ Tunnel (fra1 · reachable)`. It refreshes every five seconds;
+`/tunnel-refresh` refreshes immediately. Failed checks mark previous details
+stale. Reload OpenCode after updating the plugin.
 The TUI uses the same API options from the terminal machine, so remote-server
 setups need an API address reachable from that machine.
 

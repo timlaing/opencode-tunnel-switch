@@ -49,6 +49,6 @@
     "solid-js": "^1.9.12"
   },
   "overrides": {
-    "seroval": "^1.6.9"
+    "seroval": "~1.6.11"
   }
 }

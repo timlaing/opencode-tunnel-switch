@@ -35,7 +35,7 @@ try {
   await refresh(); await view.renderOnce();
   let frame = view.captureCharFrame();
   const row = (frameText: string, label: string) => {
-    const line = frameText.split("\n").find((candidate) => candidate.includes(`${label}:`));
+    const line = frameText.split("\n").find((candidate) => candidate.startsWith(`  ${label}`));
     assert.ok(line, `missing ${label} row`);
     return line.trimEnd();
   };
@@ -67,8 +67,8 @@ try {
   // Collapsing (like the MCP box) hides the rows and shows a muted summary.
   await layer?.commands?.[1].run(); await view.renderOnce();
   frame = view.captureCharFrame();
-  assert.match(frame, /▶ Tunnel \(reachable\)/);
-  assert.doesNotMatch(frame, /Server:/);
+  assert.match(frame, /▶ Tunnel \(rotated-server · reachable\)/);
+  assert.doesNotMatch(frame, /Server/);
   await layer?.commands?.[1].run(); await view.renderOnce();
   assert.ok(row(view.captureCharFrame(), "Server").endsWith("rotated-server"));
   console.log(view.captureCharFrame());
