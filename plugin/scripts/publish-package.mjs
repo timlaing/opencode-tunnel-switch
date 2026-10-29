@@ -77,7 +77,7 @@ for (const { registry, access, provenance, args, integrity } of targets) {
     assertPublishedMatches(pack, published, registry, provenance);
     console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive after a failed upload; an earlier publish attempt already landed it, no upload required.`);
     continue;
-  } catch (verifyFailure) {
-    throw new Error(`Package upload to ${registry} failed; ${verifyFailure.message}`);
+  } catch (error_) {
+    throw new Error(`Package upload to ${registry} failed; ${error_.message}`);
   }
 }
