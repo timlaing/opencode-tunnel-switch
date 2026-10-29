@@ -66,23 +66,29 @@ export const expectedRepositoryUrl = "git+https://github.com/timlaing/opencode-t
  * anything else falls back to the default rather than risking a retry loop
  * whose bound never matches (NaN === NaN is false).
  *
- * The returned deadline is computed once here, so every read one script run
- * makes — preflight probes, staged-version verification, readback — shares a
- * single wall-clock budget of twice the configured window (attempts ×
- * retryDelayMs: one window for configured-delay waits, one for
- * Retry-After-driven waits whose hints are capped at 60s per attempt)
- * instead of claiming a fresh window per call. That keeps a fully-retried
- * publish step (220s for the workflow's 11 × 10s) and its verify step (a
- * separate run, another 220s) far inside the 15-minute job timeout; the
- * local 5 × 3s defaults budget 30s per step. A zero-delay configuration
- * (tests, ad-hoc local runs) bounds by attempt count alone. */
+ * The returned object includes a `deadline` computed once per call, so every
+ * read one script run makes — preflight probes, staged-version verification,
+ * readback — shares a single wall-clock budget. That budget accounts for the
+ * maximum permitted Retry-After hint (60s per attempt) plus the configured
+ * delay, keeping a fully-retried publish step (11 attempts × (10s + 60s) =
+ * ~12.8 minutes) well inside the 15-minute job timeout; the local 5 × 3s
+ * defaults budget 5 × (3s + 60s) = ~5 minutes. A zero-delay configuration
+ * (tests, ad-hoc local runs) bounds by attempt count with a per-call timeout
+ * of 30s so a stalled read cannot hang forever. */
 export function retrySettings() {
   const requestedAttempts = Number.parseInt(process.env.VERIFY_ATTEMPTS ?? "", 10);
   const attempts = Number.isInteger(requestedAttempts) && requestedAttempts > 0 ? requestedAttempts : 5;
   const requestedDelayMs = Number.parseInt(process.env.VERIFY_RETRY_DELAY_MS ?? "", 10);
   const retryDelayMs = Number.isInteger(requestedDelayMs) && requestedDelayMs >= 0 ? requestedDelayMs : 3000;
-  const deadline = retryDelayMs > 0 ? Date.now() + 2 * attempts * retryDelayMs : Infinity;
+  const maxHintMs = 60000; // 60s cap per attempt
+  const deadline = retryDelayMs > 0 ? Date.now() + attempts * (retryDelayMs + maxHintMs) : Infinity;
   return { attempts, retryDelayMs, deadline };
+}
+
+/** Create a fresh settings object with a new deadline (for readback after
+ * upload failure, which must not share the preflight/upload deadline). */
+export function freshRetrySettings() {
+  return retrySettings();
 }
 
 /** A freshly published version can lag on a registry's read path (npm stages
@@ -91,7 +97,7 @@ export function retrySettings() {
  * reads retry transient failures for a bounded period instead of failing a
  * successful upload. Returns the parsed document once a non-empty body is
  * served. */
-const transientCodes = new Set(["E404", "E429", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN"]);
+const transientCodes = new Set(["E404", "E429", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH"]);
 const sleep = (ms) => ms > 0 && Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /** An error is transient only when it carries a known transient code or
@@ -118,15 +124,17 @@ const waitMs = (error, retryDelayMs) => {
 
 /** Run npm view with a per-call timeout derived from the shared deadline.
  * Returns the parsed JSON document once a non-empty body is served. */
+const PER_CALL_TIMEOUT_MS = 30000; // 30s per call when no deadline
 export function readPublishedVersion(registry, pack, settings) {
   const { attempts, retryDelayMs, deadline } = settings;
   for (let attempt = 1; ; attempt++) {
     const remaining = deadline - Date.now();
     if (remaining <= 0)
       throw new Error(`Read deadline exceeded for ${registry} after ${attempt - 1} attempt(s)`);
+    const timeout = Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS;
     const result = runNpm(
       ["view", `${pack.name}@${pack.version}`, "--json", ...registryArgs(registry, pack.name)],
-      { encoding: "utf8", timeout: Number.isFinite(remaining) ? remaining : undefined }
+      { encoding: "utf8", timeout }
     );
     // npm can exit 0 with empty output while metadata is still propagating;
     // only a non-empty body is a readable readback.
@@ -183,9 +191,10 @@ export function probeVersion(registry, pack, settings) {
     const remaining = deadline - Date.now();
     if (remaining <= 0)
       throw new Error(`Probe deadline exceeded for ${registry} after ${attempt - 1} attempt(s)`);
+    const timeout = Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS;
     const result = runNpm(
       ["view", `${pack.name}@${pack.version}`, "dist.integrity", "repository.url", "dist.attestations.url", "--json", ...registryArgs(registry, pack.name)],
-      { encoding: "utf8", timeout: Number.isFinite(remaining) ? remaining : undefined }
+      { encoding: "utf8", timeout }
     );
     const handled = handleProbeResult(result, registry, attempt, attempts, deadline, retryDelayMs);
     if (handled !== undefined) return handled;

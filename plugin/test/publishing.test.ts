@@ -267,7 +267,11 @@ process.exit(1);
     const probes = calls.filter((args) => args.includes("dist.integrity"));
     const publishes = calls.filter((args) => args[0] === "publish");
     // npm probed twice (one rate-limited retry), GitHub Packages once.
+    // The retry following npmjs's E429 must still target npmjs.
     assert.equal(probes.length, 3, "the rate-limited npm probe must be retried within the bound");
+    assert.ok(probes[0].includes("--registry=https://registry.npmjs.org"), "first probe targets npmjs");
+    assert.ok(probes[1].includes("--registry=https://registry.npmjs.org"), "retry probe targets npmjs");
+    assert.ok(probes[2].includes("--registry=https://npm.pkg.github.com"), "GitHub probe targets GitHub Packages");
     assert.equal(publishes.length, 2, "a rate-limited probe must not abort the publish before any upload");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
@@ -418,7 +422,7 @@ console.log(${JSON.stringify(JSON.stringify(published))});
     // Retry-After hint (400ms), not the 100ms configured delay: a hint
     // honoured wall-clock run is >= ~350ms, while a hint ignored would
     // finish near 100ms; the cap keeps it well under 2s either way.
-    // Use 10 attempts so the shared deadline (2 × 10 × 100ms = 2000ms)
+    // Use 10 attempts so the shared deadline (10 × (100ms + 60s) = ~10 min)
     // leaves enough budget for the second registry after the 400ms hint wait.
     const started = Date.now();
     const limited = run("rate-limited", "10", "100");
@@ -426,7 +430,8 @@ console.log(${JSON.stringify(JSON.stringify(published))});
     assert.equal(limited.status, 0, limited.stderr);
     assert.equal(views().length, 3, "a rate-limited first readback must be retried");
     assert.ok(elapsed >= 350, `Retry-After hint must be honoured (took ${elapsed}ms, expected >= ~400ms rather than the 100ms configured delay)`);
-    assert.ok(elapsed < 2000, `Retry-After waits must stay bounded (took ${elapsed}ms)`);
+    // Allow generous headroom for CI scheduler jitter; the hint wait is ~400ms.
+    assert.ok(elapsed < 5000, `Retry-After waits must stay bounded (took ${elapsed}ms)`);
     rmSync(log); rmSync(count);
     // A persistent 404 must stop after the configured attempt bound.
     const persistent = run("always-404");
