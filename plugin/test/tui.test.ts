@@ -310,6 +310,29 @@ test("tunnel-switch sidebar", async (t) => {
       }
     });
 
+    await t.test("clips a long tunnel name so the state stays visible", async () => {
+      reset({ server: "a-very-long-server-name-that-overflows-the-sidebar" });
+      const h = await start({ apiToken: "test-token" });
+      try {
+        await h.layer?.commands?.[0].run();
+        const view = await openView(h.claim!);
+        try {
+          await view.renderOnce();
+          await h.layer?.commands?.[1].run();
+          await view.renderOnce();
+          const collapsed = view.captureCharFrame();
+          assert.match(collapsed, /▶ Tunnel \(a-very-long-server-… · reachable\)/);
+          const summary = view.captureSpans().lines.flatMap((line) => line.spans)
+            .find((candidate) => candidate.text.includes("· reachable"));
+          assert.ok(summary, "reachability state must stay in the collapsed header");
+        } finally {
+          view.renderer.destroy();
+        }
+      } finally {
+        h.dispose();
+      }
+    });
+
     await t.test("degrades to one actionable toast when options are missing", async () => {
       reset();
       const h = await start({});

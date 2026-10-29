@@ -5,6 +5,11 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+- Bound the tunnel name in the collapsed summary to 20 columns (elided with
+  `…`) so a long hostname cannot push the reachability state out of the
+  header, and replace the nested ternary the reachability state was built
+  with (SonarQube typescript:S3358) with plain branches — both raised on
+  the collapsed-summary change.
 - Restyle the Tunnel sidebar rows to match the sibling TUI plugins: row
   titles are now bold in the theme's base colour, prefixed by two spaces and
   no longer suffixed with a colon; the tunnel heading keeps `text.base`.

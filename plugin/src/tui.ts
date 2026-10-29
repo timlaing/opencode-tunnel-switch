@@ -118,10 +118,18 @@ export default Plugin.define({
       ]; } });
     // Muted summary shown beside "Tunnel" while the sidebar is collapsed,
     // naming the tunnel (its configured server) once one has been reported.
+    // The name is capped so a long hostname cannot push the reachability
+    // state out of the collapsed header.
+    /** Keep a server name within 20 columns, elided with an ellipsis. */
+    const clipName = (name: string): string => (name.length <= 20 ? name : `${name.slice(0, 19)}…`);
     const collapsedSummary = (name: string | null | undefined, checked: number | undefined,
       available: boolean): string => {
-      const reach = !checked ? "checking…" : available ? "reachable" : "unavailable";
-      return name ? ` (${name} · ${reach})` : ` (${reach})`;
+      let reach: string;
+      if (!checked) reach = "checking…";
+      else if (available) reach = "reachable";
+      else reach = "unavailable";
+      if (!name) return ` (${reach})`;
+      return ` (${clipName(name)} · ${reach})`;
     };
     // Feedback colour for a tunnel state.
     const stateColour = (state: TunnelStatus["state"]): string => {
