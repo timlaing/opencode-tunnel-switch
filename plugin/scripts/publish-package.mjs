@@ -1,5 +1,5 @@
 import path from "node:path";
-import { expectedRepositoryUrl, readPackFromStdin, registryArgs, runNpm, targetRegistries } from "./npm-cli.mjs";
+import { assertPublishedMatches, expectedRepositoryUrl, readPackFromStdin, readPublishedVersion, registryArgs, retrySettings, runNpm, targetRegistries } from "./npm-cli.mjs";
 
 const [pack] = readPackFromStdin();
 
@@ -38,28 +38,40 @@ for (const { registry, integrity, repository } of targets) {
 // Every registry is either already consistent or missing the version; upload.
 // A rerun after a partial failure converges: published registries are skipped
 // on their integrity match and the missing one is retried.
+// The staged-version conflict below is only recognisable from npm's error
+// text, so the upload output is captured and replayed — but an interactive
+// run (a maintainer publishing locally) keeps the terminal on npm's stdio so
+// npm can prompt for an OTP or a login; only non-interactive CI runs, where
+// OIDC trusted publishing needs no prompt, detect the conflict.
+const interactive = Boolean(process.stdin.isTTY);
+const stagedRetry = retrySettings();
 for (const { registry, access, provenance, args, integrity } of targets) {
   if (integrity !== null) continue;
   // --provenance is CI-only (it needs the Actions OIDC token) and npmjs-only
   // (GitHub Packages does not accept provenance attestations).
   const attest = provenance && process.env.GITHUB_ACTIONS === "true" ? ["--provenance"] : [];
-  // Capture the upload output instead of inheriting: the staged-version
-  // conflict below is only recognisable from npm's error text, so the
-  // notices are replayed here to keep the CI log intact.
-  const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], { encoding: "utf8" });
-  if (upload.stdout) process.stdout.write(upload.stdout);
-  if (upload.stderr) process.stderr.write(upload.stderr);
+  const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], interactive ? { stdio: "inherit" } : { encoding: "utf8" });
+  if (!interactive) {
+    if (upload.stdout) process.stdout.write(upload.stdout);
+    if (upload.stderr) process.stderr.write(upload.stderr);
+  }
   if (upload.status === 0) continue;
   // npm accepts a publish into a staging area and only later exposes the
   // version on the read path. A rerun inside that window probes the version
   // as missing (E404 or an empty view) and re-uploads, which npm rejects
   // with E409 for the version it already staged — the earlier upload is in
-  // flight, not failed. Treat it as "upload not required": the readback step
-  // verifies integrity, repository metadata and attestation once propagation
-  // completes, exactly as for a probe match. Any other upload failure still
-  // aborts before the remaining registries are touched.
-  if (/E409/.test(upload.stderr) && /previously staged version/.test(upload.stderr)) {
-    console.log(`${pack.name}@${pack.version} is already staged on ${registry} by an earlier publish attempt; the readback verifies it once the registry exposes it.`);
+  // flight, not failed. Published versions are immutable, so before any
+  // remaining registry receives its own unretractable upload, wait for the
+  // staged version to surface (bounded by the same retry settings as the
+  // readback) and verify it against the tested artifact: integrity,
+  // repository linkage and the provenance attestation. A mismatch, or a
+  // version that stays unreadable past the bound, aborts here exactly like
+  // the probe mismatch above. Any other upload failure aborts too.
+  if (!interactive && /E409/.test(upload.stderr) && /previously staged version/.test(upload.stderr)) {
+    console.log(`${pack.name}@${pack.version} is already staged on ${registry} by an earlier publish attempt; verifying it against the tested artifact before uploading to the remaining registries.`);
+    const published = readPublishedVersion(registry, pack, stagedRetry);
+    assertPublishedMatches(pack, published, registry, provenance);
+    console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive; no upload required.`);
     continue;
   }
   throw new Error(`Package upload to ${registry} failed`);

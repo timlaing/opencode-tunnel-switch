@@ -6,18 +6,27 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 ## Unreleased
 
 - Treat npm's `E409` "Cannot publish over previously staged version" during
-  upload as "already staged by an earlier publish attempt" instead of
-  failing the publish step. npm accepts a publish into a staging area and
-  only later exposes the version on its read path, so a `workflow_dispatch`
-  rerun inside that window probes the version as missing (E404 or an empty
-  view) and the re-upload collides with the version npm already staged —
-  the 1.5.0 release hit exactly this after the release-triggered run lost
-  the propagation race, and the rerun failed at upload instead of at
-  readback. The conflict is tolerated the same way a probe integrity match
-  is: the readback step still verifies integrity, repository metadata and
-  the provenance attestation once the registry exposes the version. Every
-  other upload failure keeps aborting before the remaining registries are
-  touched.
+  upload as "staged by an earlier publish attempt" instead of failing the
+  publish step — but only after verifying it. npm accepts a publish into a
+  staging area and only later exposes the version on its read path, so a
+  `workflow_dispatch` rerun inside that window probes the version as
+  missing (E404 or an empty view) and the re-upload collides with the
+  version npm already staged — the 1.5.0 release hit exactly this after
+  the release-triggered run lost the propagation race, and the rerun failed
+  at upload instead of at readback. Because published versions are
+  immutable, the helper now waits for the staged version to surface
+  (bounded by the same `VERIFY_ATTEMPTS`/`VERIFY_RETRY_DELAY_MS` settings
+  as the readback, sharing its reader) and verifies it against the tested
+  artifact — integrity, repository linkage and the provenance attestation —
+  before uploading to any remaining registry; a mismatch or a version that
+  stays unreadable past the bound aborts exactly like a probe mismatch, so
+  one registry can never receive an unretractable upload while another
+  holds a staged version that was never checked. Only the exact staged
+  conflict is tolerated (an unrelated `E409` still aborts), and interactive
+  runs keep the terminal on npm's stdio so an OTP or login prompt keeps
+  working — conflict detection needs the captured error text, which only
+  the non-interactive CI path (OIDC trusted publishing, no prompts)
+  collects.
 
 ## [1.5.0] - 2026-10-29
 

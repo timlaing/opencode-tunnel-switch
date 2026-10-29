@@ -82,62 +82,116 @@ console.log(JSON.stringify({
   });
 }
 
-test("a rerun tolerates npm's staged-version conflict but aborts on other upload failures", () => {
+test("a rerun verifies npm's staged version before uploading elsewhere and aborts on unrelated failures", () => {
   const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-staged-test-"));
   const log = path.join(directory, "calls.jsonl");
+  const count = path.join(directory, "count");
   const manifest = JSON.stringify([{ name: "@timlaing/opencode-tunnel-switch", version: "0.1.0", filename: "package.tgz", integrity: "sha512-tested" }]);
   writeFileSync(path.join(directory, "npm-cli.cjs"), `#!/usr/bin/env node
 const fs = require('node:fs');
 fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
 const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+const publishMode = process.env[isNpmjs ? 'TEST_NPM_NPMJS_PUBLISH' : 'TEST_NPM_GH_PUBLISH'];
 if (process.argv[2] === 'publish') {
-  const mode = process.env[isNpmjs ? 'TEST_NPM_NPMJS_PUBLISH' : 'TEST_NPM_GH_PUBLISH'];
-  if (mode === 'staged') {
+  if (publishMode.startsWith('staged')) {
     console.error('npm error code E409');
     console.error('npm error 409 Conflict - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - Cannot publish over previously staged version "0.1.0".');
     process.exit(1);
   }
-  if (mode === 'forbidden') {
+  if (publishMode === 'forbidden') {
     console.error('npm error code E403');
     console.error('npm error 403 Forbidden - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - You do not have permission to publish.');
     process.exit(1);
   }
+  if (publishMode === 'e409-unrelated') {
+    console.error('npm error code E409');
+    console.error('npm error 409 Conflict - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - You cannot publish over the previously published versions.');
+    process.exit(1);
+  }
   process.exit(0);
 }
-// Both registries probe as missing so every run reaches the upload loop.
+// The preflight probe asks for specific fields; the staged version is not on
+// the read path yet, so the probe always misses it.
+if (process.argv.includes('dist.integrity')) {
+  console.log(JSON.stringify({ error: { code: 'E404' } }));
+  process.exit(1);
+}
+// After a tolerated staged conflict the earlier upload surfaces: the first
+// read still propagates (E404), then the staged document is served —
+// matching, divergent or unattested per the fixture.
+if (isNpmjs && publishMode && publishMode.startsWith('staged')) {
+  let n = 0;
+  try { n = Number(fs.readFileSync(process.env.TEST_NPM_COUNT, 'utf8') || 0); } catch {}
+  fs.writeFileSync(process.env.TEST_NPM_COUNT, String(n + 1));
+  if (n === 0) {
+    console.log(JSON.stringify({ error: { code: 'E404' } }));
+    process.exit(1);
+  }
+  console.log(JSON.stringify({
+    name: '@timlaing/opencode-tunnel-switch',
+    version: '0.1.0',
+    dist: {
+      integrity: publishMode === 'staged-diverges' ? 'sha512-other' : 'sha512-tested',
+      ...(publishMode === 'staged-unattested' ? {} : {
+        attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing/opencode-tunnel-switch@0.1.0' },
+      }),
+    },
+    repository: { url: 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+  }));
+  process.exit(0);
+}
 console.log(JSON.stringify({ error: { code: 'E404' } }));
 process.exit(1);
 `, { mode: 0o755 });
-  const run = (npmjsPublish: string) => spawnSync(process.execPath, [script], {
-    cwd: directory, encoding: "utf8", input: manifest,
-    env: {
-      ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"), TEST_NPM_LOG: log,
-      TEST_NPM_NPMJS_PUBLISH: npmjsPublish, TEST_NPM_GH_PUBLISH: "ok",
-    },
-  });
+  const run = (npmjsPublish: string) => {
+    rmSync(log, { force: true }); rmSync(count, { force: true });
+    return spawnSync(process.execPath, [script], {
+      cwd: directory, encoding: "utf8", input: manifest,
+      env: {
+        ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"),
+        TEST_NPM_LOG: log, TEST_NPM_COUNT: count, VERIFY_ATTEMPTS: "3", VERIFY_RETRY_DELAY_MS: "0",
+        TEST_NPM_NPMJS_PUBLISH: npmjsPublish, TEST_NPM_GH_PUBLISH: "ok",
+      },
+    });
+  };
   const publishes = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
     .map((line) => JSON.parse(line) as string[]).filter((args) => args[0] === "publish");
   try {
     // npm exposes a staged version only after propagation, so a rerun inside
     // that window probes it as missing and the re-upload collides with the
-    // version npm already staged. The conflict must not fail the run, and
+    // version npm already staged. Once the staged version surfaces with the
+    // tested archive's integrity and attestation, the run must succeed and
     // the second registry must still be uploaded after it.
     const staged = run("staged");
     assert.equal(staged.status, 0, staged.stderr);
-    assert.match(staged.stdout, /already staged on https:\/\/registry\.npmjs\.org/);
+    assert.match(staged.stdout, /matches the tested archive/);
     const stagedUploads = publishes();
-    assert.equal(stagedUploads.length, 2, "npm must be attempted and GitHub Packages uploaded after the tolerated conflict");
+    assert.equal(stagedUploads.length, 2, "npm must be attempted and GitHub Packages uploaded after the verified conflict");
     assert.ok(stagedUploads[0].includes("--registry=https://registry.npmjs.org"));
     assert.ok(stagedUploads[1].includes("--registry=https://npm.pkg.github.com"));
-    rmSync(log);
-    // Any other upload failure keeps the old behaviour: abort immediately,
-    // before the remaining registries are touched.
+    // Published versions are immutable: a staged version with different
+    // contents must abort before the second registry gets an unretractable
+    // upload of its own.
+    const diverges = run("staged-diverges");
+    assert.notEqual(diverges.status, 0);
+    assert.match(diverges.stderr, /does not match the tested artifact/);
+    assert.equal(publishes().length, 1, "a divergent staged version must stop the loop at the first registry");
+    // The same holds for a staged version that reached npm unattested.
+    const unattested = run("staged-unattested");
+    assert.notEqual(unattested.status, 0);
+    assert.match(unattested.stderr, /no signed provenance attestation/);
+    assert.equal(publishes().length, 1, "an unattested staged version must stop the loop at the first registry");
+    // An unrelated upload failure keeps the old behaviour: abort immediately.
     const forbidden = run("forbidden");
     assert.notEqual(forbidden.status, 0);
     assert.match(forbidden.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
-    const forbiddenUploads = publishes();
-    assert.equal(forbiddenUploads.length, 1, "a real upload failure must stop the loop");
-    assert.ok(forbiddenUploads[0].includes("--registry=https://registry.npmjs.org"));
+    assert.equal(publishes().length, 1, "a real upload failure must stop the loop");
+    // A bare E409 without the staged-version wording is unrelated too: only
+    // the exact staged conflict is tolerated, never every 409.
+    const unrelated = run("e409-unrelated");
+    assert.notEqual(unrelated.status, 0);
+    assert.match(unrelated.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
+    assert.equal(publishes().length, 1, "an unrelated E409 must stop the loop");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
