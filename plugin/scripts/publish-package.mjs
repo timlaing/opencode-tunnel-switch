@@ -43,6 +43,24 @@ for (const { registry, access, provenance, args, integrity } of targets) {
   // --provenance is CI-only (it needs the Actions OIDC token) and npmjs-only
   // (GitHub Packages does not accept provenance attestations).
   const attest = provenance && process.env.GITHUB_ACTIONS === "true" ? ["--provenance"] : [];
-  const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], { stdio: "inherit" });
-  if (upload.status !== 0) throw new Error(`Package upload to ${registry} failed`);
+  // Capture the upload output instead of inheriting: the staged-version
+  // conflict below is only recognisable from npm's error text, so the
+  // notices are replayed here to keep the CI log intact.
+  const upload = runNpm(["publish", path.resolve(pack.filename), `--access=${access}`, ...attest, ...args], { encoding: "utf8" });
+  if (upload.stdout) process.stdout.write(upload.stdout);
+  if (upload.stderr) process.stderr.write(upload.stderr);
+  if (upload.status === 0) continue;
+  // npm accepts a publish into a staging area and only later exposes the
+  // version on the read path. A rerun inside that window probes the version
+  // as missing (E404 or an empty view) and re-uploads, which npm rejects
+  // with E409 for the version it already staged — the earlier upload is in
+  // flight, not failed. Treat it as "upload not required": the readback step
+  // verifies integrity, repository metadata and attestation once propagation
+  // completes, exactly as for a probe match. Any other upload failure still
+  // aborts before the remaining registries are touched.
+  if (/E409/.test(upload.stderr) && /previously staged version/.test(upload.stderr)) {
+    console.log(`${pack.name}@${pack.version} is already staged on ${registry} by an earlier publish attempt; the readback verifies it once the registry exposes it.`);
+    continue;
+  }
+  throw new Error(`Package upload to ${registry} failed`);
 }

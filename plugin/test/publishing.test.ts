@@ -82,6 +82,65 @@ console.log(JSON.stringify({
   });
 }
 
+test("a rerun tolerates npm's staged-version conflict but aborts on other upload failures", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-staged-test-"));
+  const log = path.join(directory, "calls.jsonl");
+  const manifest = JSON.stringify([{ name: "@timlaing/opencode-tunnel-switch", version: "0.1.0", filename: "package.tgz", integrity: "sha512-tested" }]);
+  writeFileSync(path.join(directory, "npm-cli.cjs"), `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
+const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+if (process.argv[2] === 'publish') {
+  const mode = process.env[isNpmjs ? 'TEST_NPM_NPMJS_PUBLISH' : 'TEST_NPM_GH_PUBLISH'];
+  if (mode === 'staged') {
+    console.error('npm error code E409');
+    console.error('npm error 409 Conflict - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - Cannot publish over previously staged version "0.1.0".');
+    process.exit(1);
+  }
+  if (mode === 'forbidden') {
+    console.error('npm error code E403');
+    console.error('npm error 403 Forbidden - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - You do not have permission to publish.');
+    process.exit(1);
+  }
+  process.exit(0);
+}
+// Both registries probe as missing so every run reaches the upload loop.
+console.log(JSON.stringify({ error: { code: 'E404' } }));
+process.exit(1);
+`, { mode: 0o755 });
+  const run = (npmjsPublish: string) => spawnSync(process.execPath, [script], {
+    cwd: directory, encoding: "utf8", input: manifest,
+    env: {
+      ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"), TEST_NPM_LOG: log,
+      TEST_NPM_NPMJS_PUBLISH: npmjsPublish, TEST_NPM_GH_PUBLISH: "ok",
+    },
+  });
+  const publishes = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
+    .map((line) => JSON.parse(line) as string[]).filter((args) => args[0] === "publish");
+  try {
+    // npm exposes a staged version only after propagation, so a rerun inside
+    // that window probes it as missing and the re-upload collides with the
+    // version npm already staged. The conflict must not fail the run, and
+    // the second registry must still be uploaded after it.
+    const staged = run("staged");
+    assert.equal(staged.status, 0, staged.stderr);
+    assert.match(staged.stdout, /already staged on https:\/\/registry\.npmjs\.org/);
+    const stagedUploads = publishes();
+    assert.equal(stagedUploads.length, 2, "npm must be attempted and GitHub Packages uploaded after the tolerated conflict");
+    assert.ok(stagedUploads[0].includes("--registry=https://registry.npmjs.org"));
+    assert.ok(stagedUploads[1].includes("--registry=https://npm.pkg.github.com"));
+    rmSync(log);
+    // Any other upload failure keeps the old behaviour: abort immediately,
+    // before the remaining registries are touched.
+    const forbidden = run("forbidden");
+    assert.notEqual(forbidden.status, 0);
+    assert.match(forbidden.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
+    const forbiddenUploads = publishes();
+    assert.equal(forbiddenUploads.length, 1, "a real upload failure must stop the loop");
+    assert.ok(forbiddenUploads[0].includes("--registry=https://registry.npmjs.org"));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("npm provenance is requested only for the npm registry in CI", () => {
   const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-provenance-test-"));
   const log = path.join(directory, "calls.jsonl");

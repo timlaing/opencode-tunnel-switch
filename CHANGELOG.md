@@ -3,6 +3,22 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
+## Unreleased
+
+- Treat npm's `E409` "Cannot publish over previously staged version" during
+  upload as "already staged by an earlier publish attempt" instead of
+  failing the publish step. npm accepts a publish into a staging area and
+  only later exposes the version on its read path, so a `workflow_dispatch`
+  rerun inside that window probes the version as missing (E404 or an empty
+  view) and the re-upload collides with the version npm already staged —
+  the 1.5.0 release hit exactly this after the release-triggered run lost
+  the propagation race, and the rerun failed at upload instead of at
+  readback. The conflict is tolerated the same way a probe integrity match
+  is: the readback step still verifies integrity, repository metadata and
+  the provenance attestation once the registry exposes the version. Every
+  other upload failure keeps aborting before the remaining registries are
+  touched.
+
 ## [1.5.0] - 2026-10-29
 
 - Raise the seroval override floor from `^1.6.9` to `~1.6.11` (resolving
