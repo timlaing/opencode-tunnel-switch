@@ -125,10 +125,23 @@ for (let i = 0; i < targets.length; i++) {
         throw new Error(`Upload to ${registry} succeeded but readback verification failed; ${error_.message}`);
       }
     }
-    // Upload failed (or timed out). Fall through to verification readback.
+    
+    // Upload failed (or timed out). Check if this is a staged-conflict (npm E409 with "staged" wording).
+    // Only staged-conflict is recoverable — other failures (E403, network errors, etc.) remain fatal.
+    const stderr = upload.stderr ?? "";
+    const isStagedConflict = upload.status !== 0 && 
+      stderr.includes("E409") && 
+      /Cannot publish over previously staged version/i.test(stderr);
+    
+    if (!isStagedConflict) {
+      // Non-staged failure: wrap and throw immediately — no recovery.
+      throw new Error(`Package upload to ${registry} failed with non-staged error; ${stderr.trim() || upload.stdout?.trim() || "unknown error"}`);
+    }
+    
+    // Staged-conflict: fall through to verification readback to confirm the artifact.
   }
   
-  // Verification readback for failed upload: use publish step deadline, reserve time for recovery of other failed uploads.
+  // Verification readback for staged-conflict: use publish step deadline, reserve time for recovery of other failed uploads.
   const remainingRegistries = targets.slice(i + 1).filter(t => t.integrity === null).length;
   const verifyReservedMs = remainingRegistries * 60000 + recoveryReservedMs;
   const verifyDeadline = publishStepDeadline - verifyReservedMs;
@@ -140,7 +153,7 @@ for (let i = 0; i < targets.length; i++) {
     if (skipUpload) {
       console.log(`${pack.name}@${pack.version} on ${registry} verified via readback (no upload performed outside CI).`);
     } else {
-      console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive after a failed upload; an earlier publish attempt already landed it, no upload required.`);
+      console.log(`${pack.name}@${pack.version} on ${registry} matches the tested archive after a staged-conflict upload failure; an earlier publish attempt already landed it, no upload required.`);
     }
     continue;
   } catch (error_) {
