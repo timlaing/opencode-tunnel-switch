@@ -277,6 +277,15 @@ process.exit(1);
     const unrelated = run("e409-unrelated");
     assert.notEqual(unrelated.status, 0);
     assert.match(unrelated.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
+    // Verify no recovery readback was attempted for npmjs (no view --json without dist.integrity)
+    const unrelatedCalls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
+      .map((line) => JSON.parse(line) as string[]);
+    const unrelatedNpmjsReadbacks = unrelatedCalls.filter((args) =>
+      args.includes("--registry=https://registry.npmjs.org") &&
+      args.includes("--json") &&
+      !args.includes("dist.integrity")
+    );
+    assert.equal(unrelatedNpmjsReadbacks.length, 0, "no recovery readback for unrelated E409");
     assert.equal(publishes().length, 1, "an unrelated E409 must stop the loop");
     // The staged-version wording under a non-E409 code must not be tolerated
     // either — wording is never matched; with nothing readable to verify,
@@ -284,6 +293,15 @@ process.exit(1);
     const worded = run("worded-conflict");
     assert.notEqual(worded.status, 0);
     assert.match(worded.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
+    // Verify no recovery readback was attempted for npmjs
+    const wordedCalls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
+      .map((line) => JSON.parse(line) as string[]);
+    const wordedNpmjsReadbacks = wordedCalls.filter((args) =>
+      args.includes("--registry=https://registry.npmjs.org") &&
+      args.includes("--json") &&
+      !args.includes("dist.integrity")
+    );
+    assert.equal(wordedNpmjsReadbacks.length, 0, "no recovery readback for staged wording under non-E409");
     assert.equal(publishes().length, 1, "staged wording without a landed artifact must stop the loop");
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
