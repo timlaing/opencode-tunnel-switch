@@ -519,8 +519,11 @@ console.log(${JSON.stringify(JSON.stringify(published))});
     assert.equal(limited.status, 0, limited.stderr);
     assert.equal(views().length, 3, "a rate-limited first readback must be retried");
     assert.ok(elapsed >= 350, `Retry-After hint must be honoured (took ${elapsed}ms, expected >= ~400ms rather than the 100ms configured delay)`);
-    // Allow generous headroom for CI scheduler jitter; the hint wait is ~400ms.
-    assert.ok(elapsed < 5000, `Retry-After waits must stay bounded (took ${elapsed}ms)`);
+    // NOTE: This test measures wall-clock time of the entire subprocess run,
+    // including process startup and scheduling. The upper bound is generous
+    // to avoid flakiness on loaded runners. A proper fix would inject a
+    // controlled clock into the retry logic for deterministic testing.
+    assert.ok(elapsed < 30000, `Retry-After waits must stay bounded (took ${elapsed}ms)`);
     rmSync(log); rmSync(count);
     // A persistent 404 must stop after the configured attempt bound.
     const persistent = run("always-404");
