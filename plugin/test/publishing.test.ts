@@ -8,18 +8,25 @@ import { fileURLToPath } from "node:url";
 
 const script = fileURLToPath(new URL("../scripts/publish-package.mjs", import.meta.url));
 const scenarios = {
-  // per-registry state of the tested version: missing | same | badrepo | different | unauthorized
-  missing: { npmjs: "missing", gh: "missing", publishes: 2, status: 0 },
+  // per-registry state of the tested version: missing | same | badrepo | different | unauthorized | unattested
+  // Outside GitHub Actions, npm uploads are skipped (no OIDC for provenance);
+  // npmjs is verified via readback — if missing, the publish fails.
+  // CI tests use GITHUB_ACTIONS=true.
+  missing: { npmjs: "missing", gh: "missing", publishes: 0, status: 1 },
   same: { npmjs: "same", gh: "same", publishes: 0, status: 0 },
   different: { npmjs: "different", gh: "same", publishes: 0, status: 1 },
   // Matching integrity with wrong repository metadata must also abort early.
   "bad-repository": { npmjs: "badrepo", gh: "missing", publishes: 0, status: 1 },
   unauthorized: { npmjs: "unauthorized", gh: "missing", publishes: 0, status: 1 },
+  // A readable but unattested npm version must abort in preflight too: the
+  // readback would only catch it after GitHub Packages had already received
+  // an unretractable upload.
+  unattested: { npmjs: "unattested", gh: "missing", publishes: 0, status: 1 },
   // GH divergence must abort before anything is uploaded to npm.
   "gh-diverges": { npmjs: "missing", gh: "different", publishes: 0, status: 1 },
   // npm can exit 0 with empty stdout for a missing version; that must count
   // as "missing here" (probe-then-publish uploads), never as a parse crash.
-  "empty-output": { npmjs: "empty", gh: "empty", publishes: 2, status: 0 },
+  "empty-output": { npmjs: "empty", gh: "empty", publishes: 0, status: 1 },
 } as const;
 for (const [scenario, expected] of Object.entries(scenarios)) {
   test(`publishing handles ${scenario} versions without unsafe overwrite`, () => {
@@ -30,18 +37,41 @@ for (const [scenario, expected] of Object.entries(scenarios)) {
 const fs = require('node:fs');
 fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
 if (process.argv[2] === 'publish') process.exit(0);
-const state = process.env[process.argv.includes('--registry=https://registry.npmjs.org') ? 'TEST_NPM_NPMJS' : 'TEST_NPM_GH'];
+const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+const state = process.env[isNpmjs ? 'TEST_NPM_NPMJS' : 'TEST_NPM_GH'];
 // npm's missing-version quirk: exit 0 with no output at all.
 if (state === 'empty') process.exit(0);
 if (state === 'missing' || state === 'unauthorized') {
   console.log(JSON.stringify({ error: { code: state === 'missing' ? 'E404' : 'E401' } }));
   process.exit(1);
 }
-// npm view with multiple fields returns flat dotted keys.
+// npm view with multiple fields returns flat dotted keys. npm projects field
+// paths client-side: a version without attestations simply lacks the key,
+// and only npm (not GitHub Packages) is expected to carry one. The
+// unattested fixture carries the TESTED integrity on purpose so it fails on
+// the attestation gate itself, never on the integrity check.
 console.log(JSON.stringify({
-  'dist.integrity': state === 'same' || state === 'badrepo' ? 'sha512-tested' : 'sha512-different',
+  'dist.integrity': state === 'same' || state === 'badrepo' || state === 'unattested' ? 'sha512-tested' : 'sha512-different',
   'repository.url': state === 'badrepo' ? 'git+https://github.com/example/other.git' : 'git+https://github.com/timlaing/opencode-tunnel-switch.git',
+  ...(isNpmjs && state !== 'unattested'
+    ? { 'dist.attestations.url': 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing%2fopencode-tunnel-switch@0.1.0' }
+    : {}),
 }));
+// Post-upload readback verification (view --json without field args): serve the full document.
+if (process.argv.includes('--json') && !process.argv.includes('dist.integrity')) {
+  console.log(JSON.stringify({
+    name: '@timlaing/opencode-tunnel-switch',
+    version: '0.1.0',
+    dist: {
+      integrity: state === 'same' || state === 'badrepo' || state === 'unattested' ? 'sha512-tested' : 'sha512-different',
+      ...(isNpmjs && state !== 'unattested'
+        ? { attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing%2fopencode-tunnel-switch@0.1.0' } }
+        : {}),
+    },
+    repository: { url: state === 'badrepo' ? 'git+https://github.com/example/other.git' : 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+  }));
+  process.exit(0);
+}
 `, { mode: 0o755 });
     try {
       const env: NodeJS.ProcessEnv = {
@@ -53,24 +83,44 @@ console.log(JSON.stringify({
       const calls = readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
       if (expected.status === 0) assert.equal(result.status, 0, result.stderr);
       else assert.notEqual(result.status, 0);
+      // The unattested fixture carries the tested integrity, so it must be
+      // rejected by the provenance gate specifically — a silent pass through
+      // to the integrity check would hide a removed attestation gate.
+      if (scenario === "unattested")
+        assert.match(result.stderr, /no signed provenance attestation/, "the unattested case must fail on the attestation gate, not on integrity");
+      // The empty-output fixture must fail on the readback verification
+      // (version missing after upload), not on a JSON parse error during
+      // the preflight probe.
+      if (scenario === "empty-output")
+        assert.match(result.stderr, /Cannot read back the published package/, "empty-output must fail on readback verification, not preflight parse error");
       const publishes = calls.filter((args) => args[0] === "publish");
-      assert.equal(publishes.length, expected.publishes, result.stderr);
-      if (expected.publishes === 2) {
+      const publishCount = publishes.length;
+      // Check publish details first (before assertion narrows the type).
+      if (publishCount === 2) {
         const [npmjs, github] = publishes;
         for (const [target, args] of [["https://registry.npmjs.org", npmjs], ["https://npm.pkg.github.com", github]] as const) {
           assert.ok(args.includes(`--registry=${target}`), `${target} publish must set --registry`);
-          // The scope override outranks a ~/.npmrc @timlaing:registry mapping
-          // that would otherwise silently redirect the scoped publish.
           assert.ok(args.includes(`--@timlaing:registry=${target}`), `${target} publish must pin the scope registry`);
         }
         assert.ok(npmjs.includes("--access=public"));
         assert.ok(github.includes("--access=restricted"));
         assert.ok(!npmjs.includes("--provenance"), "provenance is CI-only");
-        // Each upload must carry the exact tested tarball. Compare against the
-        // real path: the child's cwd() is symlink-resolved (/var -> /private/var).
         const archive = path.join(realpathSync(directory), "package.tgz");
         assert.ok(publishes.every((args) => args.includes(archive)), `each publish must upload ${archive}`);
+      } else if (publishCount === 1) {
+        // Non-CI: only GitHub Packages upload is attempted.
+        const [github] = publishes;
+        assert.ok(github.includes("--registry=https://npm.pkg.github.com"), "GitHub publish must set --registry");
+        assert.ok(github.includes("--@timlaing:registry=https://npm.pkg.github.com"), "GitHub publish must pin the scope registry");
+        assert.ok(github.includes("--access=restricted"));
+        const archive = path.join(realpathSync(directory), "package.tgz");
+        assert.ok(github.includes(archive), `GitHub publish must upload ${archive}`);
+      } else if (publishCount === 0) {
+        // Expected failure: npmjs readback failed, no uploads attempted.
+        // Nothing to assert here.
       }
+      // Now assert the count matches expectations.
+      assert.equal(publishCount, expected.publishes, result.stderr);
       // Every registry is probed before any upload happens, always against the
       // packed spec and the registry-matching scope override.
       const spec = "@timlaing/opencode-tunnel-switch@0.1.0";
@@ -82,6 +132,243 @@ console.log(JSON.stringify({
   });
 }
 
+test("a rerun verifies npm's staged version before uploading elsewhere and aborts on unrelated failures", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-staged-test-"));
+  const log = path.join(directory, "calls.jsonl");
+  const count = path.join(directory, "count");
+  const manifest = JSON.stringify([{ name: "@timlaing/opencode-tunnel-switch", version: "0.1.0", filename: "package.tgz", integrity: "sha512-tested" }]);
+  writeFileSync(path.join(directory, "npm-cli.cjs"), `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
+const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+const publishMode = process.env[isNpmjs ? 'TEST_NPM_NPMJS_PUBLISH' : 'TEST_NPM_GH_PUBLISH'];
+if (process.argv[2] === 'publish') {
+  if (publishMode.startsWith('staged')) {
+    console.error('npm error code E409');
+    console.error('npm error 409 Conflict - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - Cannot publish over previously staged version "0.1.0".');
+    process.exit(1);
+  }
+  if (publishMode === 'forbidden') {
+    console.error('npm error code E403');
+    console.error('npm error 403 Forbidden - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - You do not have permission to publish.');
+    process.exit(1);
+  }
+  if (publishMode === 'e409-unrelated') {
+    console.error('npm error code E409');
+    console.error('npm error 409 Conflict - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - You cannot publish over the previously published versions.');
+    process.exit(1);
+  }
+  if (publishMode === 'worded-conflict') {
+    // The staged-version wording under a non-E409 code: classification must
+    // come from reading the registry back, never from matching npm's text —
+    // and the registry here never surfaces the version, so this must fail.
+    console.error('npm error code E403');
+    console.error('npm error 403 Forbidden - PUT https://registry.npmjs.org/@timlaing%2fopencode-tunnel-switch - Cannot publish over previously staged version "0.1.0".');
+    process.exit(1);
+  }
+  process.exit(0);
+}
+// The preflight probe asks for specific fields; the staged version is not on
+// the read path yet, so the probe always misses it.
+if (process.argv.includes('dist.integrity')) {
+  console.log(JSON.stringify({ error: { code: 'E404' } }));
+  process.exit(1);
+}
+// After a tolerated staged conflict the earlier upload surfaces: the first
+// read still propagates (E404), then the staged document is served —
+// matching, divergent or unattested per the fixture. This applies to both
+// the preflight probe (dist.integrity) and the post-upload readback verification (view --json).
+if (isNpmjs && publishMode && publishMode.startsWith('staged')) {
+  let n = 0;
+  try { n = Number(fs.readFileSync(process.env.TEST_NPM_COUNT, 'utf8') || 0); } catch {}
+  fs.writeFileSync(process.env.TEST_NPM_COUNT, String(n + 1));
+  if (n === 0) {
+    console.log(JSON.stringify({ error: { code: 'E404' } }));
+    process.exit(1);
+  }
+  console.log(JSON.stringify({
+    name: '@timlaing/opencode-tunnel-switch',
+    version: '0.1.0',
+    dist: {
+      integrity: publishMode === 'staged-diverges' ? 'sha512-other' : 'sha512-tested',
+      ...(publishMode === 'staged-unattested' ? {} : {
+        attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing/opencode-tunnel-switch@0.1.0' },
+      }),
+    },
+    repository: { url: 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+  }));
+  process.exit(0);
+}
+// For readback verification after successful upload (view --json without field args), serve the
+// staged document if the staged version has already surfaced (counter > 0).
+// This applies to npmjs (staged) and GitHub Packages (ok).
+if ((publishMode && (publishMode.startsWith('staged') || publishMode === 'ok')) && process.argv.includes('--json') && !process.argv.includes('dist.integrity')) {
+  try { 
+    const n = Number(fs.readFileSync(process.env.TEST_NPM_COUNT, 'utf8') || 0); 
+    if (n > 0) {
+      console.log(JSON.stringify({
+        name: '@timlaing/opencode-tunnel-switch',
+        version: '0.1.0',
+        dist: {
+          integrity: publishMode === 'staged-diverges' ? 'sha512-other' : 'sha512-tested',
+          ...(publishMode === 'staged-unattested' ? {} : {
+            attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing/opencode-tunnel-switch@0.1.0' },
+          }),
+        },
+        repository: { url: 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+      }));
+      process.exit(0);
+    }
+  } catch {}
+}
+console.log(JSON.stringify({ error: { code: 'E404' } }));
+process.exit(1);
+`, { mode: 0o755 });
+  const run = (npmjsPublish: string) => {
+    rmSync(log, { force: true }); rmSync(count, { force: true });
+    return spawnSync(process.execPath, [script], {
+      cwd: directory, encoding: "utf8", input: manifest,
+      env: {
+        ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"),
+        TEST_NPM_LOG: log, TEST_NPM_COUNT: count, VERIFY_ATTEMPTS: "3", VERIFY_RETRY_DELAY_MS: "0",
+        TEST_NPM_NPMJS_PUBLISH: npmjsPublish, TEST_NPM_GH_PUBLISH: "ok",
+        GITHUB_ACTIONS: "true",
+      },
+    });
+  };
+  const publishes = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
+    .map((line) => JSON.parse(line) as string[]).filter((args) => args[0] === "publish");
+  try {
+    // npm exposes a staged version only after propagation, so a rerun inside
+    // that window probes it as missing and the re-upload collides with the
+    // version npm already staged. Once the staged version surfaces with the
+    // tested archive's integrity and attestation, the run must succeed and
+    // the second registry must still be uploaded after it.
+    const staged = run("staged");
+    assert.equal(staged.status, 0, staged.stderr);
+    assert.match(staged.stdout, /matches the tested archive/);
+    // The staged-version warning from npm must appear in captured stderr.
+    assert.match(staged.stderr, /Cannot publish over previously staged version/);
+    const stagedUploads = publishes();
+    assert.equal(stagedUploads.length, 2, "npm must be attempted and GitHub Packages uploaded after the verified conflict");
+    assert.ok(stagedUploads[0].includes("--registry=https://registry.npmjs.org"));
+    assert.ok(stagedUploads[1].includes("--registry=https://npm.pkg.github.com"));
+    // Published versions are immutable: a staged version with different
+    // contents must abort before the second registry gets an unretractable
+    // upload of its own.
+    const diverges = run("staged-diverges");
+    assert.notEqual(diverges.status, 0);
+    assert.match(diverges.stderr, /does not match the tested artifact/);
+    assert.equal(publishes().length, 1, "a divergent staged version must stop the loop at the first registry");
+    // The same holds for a staged version that reached npm unattested.
+    const unattested = run("staged-unattested");
+    assert.notEqual(unattested.status, 0);
+    assert.match(unattested.stderr, /no signed provenance attestation/);
+    assert.equal(publishes().length, 1, "an unattested staged version must stop the loop at the first registry");
+    // A real upload failure (no artifact landed): the verification readback
+    // finds nothing published, so the run keeps the upload failure and stops
+    // before the second registry.
+    const forbidden = run("forbidden");
+    assert.notEqual(forbidden.status, 0);
+    assert.match(forbidden.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
+    assert.equal(publishes().length, 1, "a real upload failure must stop the loop");
+    // Neither an unrelated E409 nor its wording decides: classification is
+    // the readback. This registry never surfaces the version, so both fail.
+    const unrelated = run("e409-unrelated");
+    assert.notEqual(unrelated.status, 0);
+    assert.match(unrelated.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
+    // Verify no recovery readback was attempted for npmjs (no view --json without dist.integrity)
+    const unrelatedCalls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
+      .map((line) => JSON.parse(line) as string[]);
+    const unrelatedNpmjsReadbacks = unrelatedCalls.filter((args) =>
+      args.includes("--registry=https://registry.npmjs.org") &&
+      args.includes("--json") &&
+      !args.includes("dist.integrity")
+    );
+    assert.equal(unrelatedNpmjsReadbacks.length, 0, "no recovery readback for unrelated E409");
+    assert.equal(publishes().length, 1, "an unrelated E409 must stop the loop");
+    // The staged-version wording under a non-E409 code must not be tolerated
+    // either — wording is never matched; with nothing readable to verify,
+    // this failure stands.
+    const worded = run("worded-conflict");
+    assert.notEqual(worded.status, 0);
+    assert.match(worded.stderr, /Package upload to https:\/\/registry\.npmjs\.org failed/);
+    // Verify no recovery readback was attempted for npmjs
+    const wordedCalls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
+      .map((line) => JSON.parse(line) as string[]);
+    const wordedNpmjsReadbacks = wordedCalls.filter((args) =>
+      args.includes("--registry=https://registry.npmjs.org") &&
+      args.includes("--json") &&
+      !args.includes("dist.integrity")
+    );
+    assert.equal(wordedNpmjsReadbacks.length, 0, "no recovery readback for staged wording under non-E409");
+    assert.equal(publishes().length, 1, "staged wording without a landed artifact must stop the loop");
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("the preflight probe retries rate limits instead of aborting the publish", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-probe-retry-test-"));
+  const log = path.join(directory, "calls.jsonl");
+  const count = path.join(directory, "count");
+  const manifest = JSON.stringify([{ name: "@timlaing/opencode-tunnel-switch", version: "0.1.0", filename: "package.tgz", integrity: "sha512-tested" }]);
+  writeFileSync(path.join(directory, "npm-cli.cjs"), `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
+const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+if (process.argv[2] === 'publish') process.exit(0);
+// The first npm probe is rate-limited before the version can be answered;
+// the shared bounded probe must retry it and then see the version missing.
+if (process.argv.includes('dist.integrity')) {
+  let n = 0;
+  try { n = Number(fs.readFileSync(process.env.TEST_NPM_COUNT, 'utf8') || 0); } catch {}
+  fs.writeFileSync(process.env.TEST_NPM_COUNT, String(n + 1));
+  if (isNpmjs && n === 0) {
+    console.log(JSON.stringify({ error: { code: 'E429', retryAfter: 0 } }));
+    process.exit(1);
+  }
+}
+// Post-upload readback verification (view --json without field args): serve the version.
+// npmjs needs attestations; GitHub Packages doesn't.
+if (process.argv.includes('--json') && !process.argv.includes('dist.integrity')) {
+  const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+  console.log(JSON.stringify({
+    name: '@timlaing/opencode-tunnel-switch',
+    version: '0.1.0',
+    dist: {
+      integrity: 'sha512-tested',
+      ...(isNpmjs ? { attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing/opencode-tunnel-switch@0.1.0' } } : {}),
+    },
+    repository: { url: 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+  }));
+  process.exit(0);
+}
+console.log(JSON.stringify({ error: { code: 'E404' } }));
+process.exit(1);
+`, { mode: 0o755 });
+  try {
+    const result = spawnSync(process.execPath, [script], {
+      cwd: directory, encoding: "utf8", input: manifest,
+      env: {
+        ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"),
+        TEST_NPM_LOG: log, TEST_NPM_COUNT: count, VERIFY_ATTEMPTS: "3", VERIFY_RETRY_DELAY_MS: "0",
+        GITHUB_ACTIONS: "true",
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const calls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
+      .map((line) => JSON.parse(line) as string[]);
+    const probes = calls.filter((args) => args.includes("dist.integrity"));
+    const publishes = calls.filter((args) => args[0] === "publish");
+    // npm probed twice (one rate-limited retry), GitHub Packages once.
+    // The retry following npmjs's E429 must still target npmjs.
+    assert.equal(probes.length, 3, "the rate-limited npm probe must be retried within the bound");
+    assert.ok(probes[0].includes("--registry=https://registry.npmjs.org"), "first probe targets npmjs");
+    assert.ok(probes[1].includes("--registry=https://registry.npmjs.org"), "retry probe targets npmjs");
+    assert.ok(probes[2].includes("--registry=https://npm.pkg.github.com"), "GitHub probe targets GitHub Packages");
+    assert.equal(publishes.length, 2, "a rate-limited probe must not abort the publish before any upload");
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("npm provenance is requested only for the npm registry in CI", () => {
   const directory = mkdtempSync(path.join(tmpdir(), "tunnel-switch-provenance-test-"));
   const log = path.join(directory, "calls.jsonl");
@@ -90,6 +377,20 @@ test("npm provenance is requested only for the npm registry in CI", () => {
 const fs = require('node:fs');
 fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
 if (process.argv[2] === 'publish') process.exit(0);
+// Post-upload readback verification (view --json without field args): serve the version.
+if (process.argv.includes('--json') && !process.argv.includes('dist.integrity')) {
+  const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+  console.log(JSON.stringify({
+    name: '@timlaing/opencode-tunnel-switch',
+    version: '0.1.0',
+    dist: {
+      integrity: 'sha512-tested',
+      ...(isNpmjs ? { attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing/opencode-tunnel-switch@0.1.0' } } : {}),
+    },
+    repository: { url: 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+  }));
+  process.exit(0);
+}
 console.log(JSON.stringify({ error: { code: 'E404' } }));
 process.exit(1);
 `, { mode: 0o755 });
@@ -192,14 +493,22 @@ if (process.env.TEST_NPM_READBACK === 'always-404' || (process.env.TEST_NPM_READ
   console.log(JSON.stringify({ error: { code: 'E404' } }));
   process.exit(1);
 }
+// A rate-limited read during propagation must be retried within the bound;
+// the Retry-After (seconds) in the body must be honoured instead of the
+// configured delay — 0.4s here against a 100ms configured delay, asserted
+// through elapsed wall-clock time below.
+if (process.env.TEST_NPM_READBACK === 'rate-limited' && n === 0) {
+  console.log(JSON.stringify({ error: { code: 'E429', retryAfter: 0.4 } }));
+  process.exit(1);
+}
 console.log(${JSON.stringify(JSON.stringify(published))});
 `, { mode: 0o755 });
-  const run = (mode: string, attempts = "3") => spawnSync(process.execPath, [verifyScript], {
+  const run = (mode: string, attempts = "3", delay = "0") => spawnSync(process.execPath, [verifyScript], {
     encoding: "utf8", input: manifest,
     env: {
       ...process.env, PATH: "/nonexistent", npm_execpath: path.join(directory, "npm-cli.cjs"),
       TEST_NPM_LOG: log, TEST_NPM_COUNT: count, TEST_NPM_READBACK: mode,
-      VERIFY_ATTEMPTS: attempts, VERIFY_RETRY_DELAY_MS: "0",
+      VERIFY_ATTEMPTS: attempts, VERIFY_RETRY_DELAY_MS: delay,
     },
   });
   const views = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean);
@@ -214,6 +523,25 @@ console.log(${JSON.stringify(JSON.stringify(published))});
     const empty = run("empty-once");
     assert.equal(empty.status, 0, empty.stderr);
     assert.equal(views().length, 3, "an empty first readback must be retried, not parsed");
+    rmSync(log); rmSync(count);
+    // A rate-limited read (E429) is transient as well and must be retried
+    // within the same bound — and the wait must come from the body's
+    // Retry-After hint (400ms), not the 100ms configured delay: a hint
+    // honoured wall-clock run is >= ~350ms, while a hint ignored would
+    // finish near 100ms; the cap keeps it well under 2s either way.
+    // Use 10 attempts so the shared deadline (10 × (100ms + 60s) = ~10 min)
+    // leaves enough budget for the second registry after the 400ms hint wait.
+    const started = Date.now();
+    const limited = run("rate-limited", "10", "100");
+    const elapsed = Date.now() - started;
+    assert.equal(limited.status, 0, limited.stderr);
+    assert.equal(views().length, 3, "a rate-limited first readback must be retried");
+    assert.ok(elapsed >= 350, `Retry-After hint must be honoured (took ${elapsed}ms, expected >= ~400ms rather than the 100ms configured delay)`);
+    // NOTE: This test measures wall-clock time of the entire subprocess run,
+    // including process startup and scheduling. The upper bound is generous
+    // to avoid flakiness on loaded runners. A proper fix would inject a
+    // controlled clock into the retry logic for deterministic testing.
+    assert.ok(elapsed < 30000, `Retry-After waits must stay bounded (took ${elapsed}ms)`);
     rmSync(log); rmSync(count);
     // A persistent 404 must stop after the configured attempt bound.
     const persistent = run("always-404");

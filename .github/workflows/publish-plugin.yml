@@ -111,6 +111,7 @@ jobs:
           # GitHub package visibility is managed separately from npm access.
           test "$(gh api users/timlaing/packages/npm/opencode-tunnel-switch --jq '.visibility')" = public
       - name: Publish the tested archive to both registries
+        id: publish
         working-directory: plugin
         # npm (registry.npmjs.org) authenticates through OIDC trusted
         # publishing: the package must list this repository and
@@ -119,14 +120,23 @@ jobs:
         run: npm run publish:package < plugin-pack.json
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A rerun during npm's staging window waits inside the publish
+          # helper for the earlier staged upload to surface on the read path;
+          # give that wait the same window as readback (11 attempts 10s
+          # apart) instead of the helper's 15s default, so the staged version
+          # is verified instead of giving up before it becomes readable.
+          VERIFY_ATTEMPTS: '11'
+          VERIFY_RETRY_DELAY_MS: '10000'
       - name: Verify the published package
         working-directory: plugin
         # A fresh version can lag on npm's read path well beyond the helper's
         # 15s default (observed on the first 1.4.3 publish, where uploads
         # succeeded but readback lost the race); allow 11 attempts 10s apart
         # here — ten retry intervals, ~100s between the first and last read.
+        # Use the remaining job time passed from the publish step.
         run: npm run verify:published < plugin-pack.json
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERIFY_ATTEMPTS: '11'
           VERIFY_RETRY_DELAY_MS: '10000'
+          VERIFY_JOB_DEADLINE_MS: ${{ steps.publish.outputs.job-deadline-ms }}

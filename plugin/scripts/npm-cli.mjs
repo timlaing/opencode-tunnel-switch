@@ -14,6 +14,27 @@ export function runNpm(args, options = {}) {
   return spawnSync(node && path.isAbsolute(node) ? node : process.execPath, [cli, ...args], options);
 }
 
+/** stdio options for an interactive upload (a maintainer publishing from a
+ * terminal), or null when no terminal is attached (CI, piped logs). npm must
+ * keep the terminal to prompt for an OTP or a login — but pack JSON arrives
+ * on stdin, so stdin itself is never a terminal: the consumed pipe is
+ * replaced with the controlling terminal input device (`/dev/tty` on Unix,
+ * `CONIN$` on Windows) where one exists. When neither can be opened there is
+ * no prompt source at all, so callers fall back to capturing npm's output
+ * instead of handing npm the already-consumed stdin pipe (which would read
+ * EOF instead of the prompt response). The returned object includes a
+ * bounded timeout so a stalled interactive publish cannot hang forever.
+ *
+ * We attempt to open the controlling terminal even when stdout/stderr are
+ * not TTYs (e.g. piped through a logger), because the maintainer may still
+ * have a controlling terminal available for npm to read OTP/login prompts. */
+export function terminalStdio() {
+  for (const device of ["/dev/tty", "CONIN$"]) {
+    try { return { stdio: [fs.openSync(device, "r"), "inherit", "inherit"], timeout: 600000 }; } catch { /* try the next device */ }
+  }
+  return null;
+}
+
 /** npm resolves a scope's registry from the `@scope:registry` config before
  * the plain `--registry` flag, so a maintainer's `~/.npmrc` scope mapping
  * silently redirects scoped publishes to the mapped registry. Force the
@@ -23,6 +44,12 @@ export function registryArgs(registry, name) {
   return scope
     ? [`--registry=${registry}`, `--${scope}:registry=${registry}`]
     : [`--registry=${registry}`];
+}
+
+/** Warn once per retry attempt with registry and error code (no credentials). */
+function warnRetry(registry, error) {
+  const code = error?.code ?? "unknown";
+  console.warn(`Retrying read from ${registry} (attempt failed: ${code})`);
 }
 
 /** The same verified tarball is published to both public registries. npm is
@@ -36,6 +63,171 @@ export const targetRegistries = [
 /** Both the preflight and the readback require published versions to be
  * linked to this repository. */
 export const expectedRepositoryUrl = "git+https://github.com/timlaing/opencode-tunnel-switch.git";
+
+/** Bounded-retry settings for registry reads (env-overridable). Both the
+ * readback and the publish preflight's staged-version wait honour these.
+ * Overrides must be positive (attempts) / non-negative (delay) integers:
+ * anything else falls back to the default rather than risking a retry loop
+ * whose bound never matches (NaN === NaN is false).
+ *
+ * The returned budgets describe how much time one script run may spend on
+ * registry reads. The CALLER must provide a `jobStart` (or `jobDeadline`)
+ * to anchor the deadlines in real time. Each registry read gets a budget of
+ * `perReadBudget`, and the total run is capped at `stepBudget`. The step
+ * budget is capped at 7 minutes so the publish step and the separate verify
+ * step can both finish within GitHub Actions' 15-minute job timeout. A
+ * zero-delay configuration (tests, ad-hoc local runs) bounds by attempt
+ * count with a per-call timeout of 30s so a stalled read cannot hang forever. */
+export function retrySettings() {
+  const requestedAttempts = Number.parseInt(process.env.VERIFY_ATTEMPTS ?? "", 10);
+  const attempts = Number.isInteger(requestedAttempts) && requestedAttempts > 0 ? requestedAttempts : 5;
+  const requestedDelayMs = Number.parseInt(process.env.VERIFY_RETRY_DELAY_MS ?? "", 10);
+  const retryDelayMs = Number.isInteger(requestedDelayMs) && requestedDelayMs >= 0 ? requestedDelayMs : 3000;
+  const maxHintMs = 60000; // 60s cap per attempt
+  // Per-read budget: attempts × (configured delay + max hint)
+  const perReadBudget = retryDelayMs > 0 ? attempts * (retryDelayMs + maxHintMs) : Infinity;
+  // Step budget: cap at 7 minutes (420s) so publish + verify steps fit in 15m job timeout
+  const stepBudget = retryDelayMs > 0 ? Math.min(perReadBudget * 2, 420000) : Infinity;
+  return { attempts, retryDelayMs, perReadBudget, stepBudget };
+}
+
+/** Create deadline settings anchored to a job start time. */
+export function createDeadlineSettings(baseSettings, jobStart, jobBudget) {
+  const stepBudget = Math.min(baseSettings.stepBudget, jobBudget);
+  const stepDeadline = jobStart + stepBudget;
+  return { ...baseSettings, stepDeadline, stepBudget };
+}
+
+/** A freshly published version can lag on a registry's read path (npm stages
+ * a publish before exposing it; GitHub Packages reads are eventually
+ * consistent), and a rate-limited read can arrive while it propagates, so
+ * reads retry transient failures for a bounded period instead of failing a
+ * successful upload. Returns the parsed document once a non-empty body is
+ * served. */
+const transientCodes = new Set(["E404", "E429", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH", "ERR_SOCKET_TIMEOUT"]);
+const sleep = (ms) => ms > 0 && Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/** An error is transient only when it carries a known transient code or
+ * a 5xx-class code. An undefined/missing error (status 0 with empty
+ * stdout) stays transient — npm prints an empty body while metadata
+ * propagates. A non-zero exit with no parseable error (malformed
+ * output, signal death, etc.) is NOT transient: fail fast. */
+const isTransient = (error, status) => {
+  if (!error) return status === 0; // empty body on exit 0 = still propagating
+  if (transientCodes.has(error.code)) return true;
+  return /^E5\d\d$/.test(error.code ?? "");
+};
+
+/** When retryDelayMs === 0, hints are ignored entirely (tests, local
+ * ad-hoc runs bound by attempt count only). Otherwise honour Retry-After
+ * from the body (seconds), capped at 60s per attempt so a hostile hint
+ * cannot stall a single attempt; the overall budget is enforced by the
+ * caller's deadline. */
+const waitMs = (error, retryDelayMs) => {
+  if (retryDelayMs === 0) return 0;
+  const retryAfter = Number(error?.retryAfter);
+  return Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 60) * 1000 : retryDelayMs;
+};
+
+/** Run npm view with a per-call timeout derived from the step deadline.
+ * Returns the parsed JSON document once a non-empty body is served. */
+const PER_CALL_TIMEOUT_MS = 30000; // 30s per call when no deadline
+export function readPublishedVersion(registry, pack, settings, reservedMs = 0) {
+  const { attempts, retryDelayMs, perReadBudget, stepDeadline } = settings;
+  const readDeadline = Math.min(stepDeadline - reservedMs, Date.now() + perReadBudget);
+  for (let attempt = 1; ; attempt++) {
+    const remaining = readDeadline - Date.now();
+    if (remaining <= 0)
+      throw new Error(`Read deadline exceeded for ${registry} after ${attempt - 1} attempt(s)`);
+    // Cap each npm view call at 30s so a stalled call cannot consume the retry budget.
+    const timeout = Math.min(Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS, PER_CALL_TIMEOUT_MS);
+    const result = runNpm(
+      ["view", `${pack.name}@${pack.version}`, "--json", ...registryArgs(registry, pack.name)],
+      { encoding: "utf8", timeout }
+    );
+    // npm can exit 0 with empty output while metadata is still propagating;
+    // only a non-empty body is a readable readback.
+    if (result.status === 0 && result.stdout.trim())
+      return JSON.parse(result.stdout);
+    let error;
+    try { error = JSON.parse(result.stdout).error; } catch {}
+    // spawnSync timeout surfaces as error.code === "ETIMEDOUT" with status=null
+    if (result.error?.code === "ETIMEDOUT") error = { code: "ETIMEDOUT" };
+    if (!isTransient(error, result.status) || attempt === attempts)
+      throw new Error(`Cannot read back the published package from ${registry} after ${attempt} attempt(s); check registry authentication, propagation and connectivity.`);
+    warnRetry(registry, error);
+    sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, readDeadline - Date.now())));
+  }
+}
+
+/** Preflight probe for one registry: returns the flat-key field document
+ * (dist.integrity, repository.url, dist.attestations.url) for an existing
+ * version, or null when the version is missing. A missing version (E404 or
+ * npm's empty-exit-0 view) answers immediately — it must proceed to upload —
+ * while transient failures such as rate limits retry within the same bounded
+ * budget and message style as the readback instead of aborting the publish.
+ * Non-transient errors (auth, malformed input) still fail fast.
+ * An existing version that lacks dist.integrity is treated as incomplete
+ * metadata — reject before any upload so an unverifiable artifact never
+ * lands. */
+function handleProbeResult(result, registry, attempt, attempts, readDeadline, retryDelayMs) {
+  // npm exits 0 with empty output when the package exists but the
+  // queried version does not; both empty and E404 mean "missing here".
+  if (result.status === 0) {
+    if (!result.stdout.trim()) return null;
+    const doc = JSON.parse(result.stdout);
+    // Version exists but is missing dist.integrity — incomplete metadata;
+    // reject before upload so the run never ships an unverifiable artifact.
+    if (!doc["dist.integrity"])
+      throw new Error(`Package version on ${registry} is missing dist.integrity; incomplete metadata — refusing to upload.`);
+    return doc;
+  }
+  let error;
+  try { error = JSON.parse(result.stdout).error; } catch {}
+  if (result.error?.code === "ETIMEDOUT") error = { code: "ETIMEDOUT" };
+  if (error?.code === "E404")
+    return null;
+  if (!isTransient(error, result.status) || attempt === attempts)
+    throw new Error(`Cannot determine whether the package version exists on ${registry}; check registry authentication and connectivity.`);
+  warnRetry(registry, error);
+  sleep(Math.min(waitMs(error, retryDelayMs), Math.max(0, readDeadline - Date.now())));
+  return undefined; // signal to retry
+}
+
+export function probeVersion(registry, pack, settings, reservedMs = 0) {
+  const { attempts, retryDelayMs, perReadBudget, stepDeadline } = settings;
+  const readDeadline = Math.min(stepDeadline - reservedMs, Date.now() + perReadBudget);
+  for (let attempt = 1; ; attempt++) {
+    const remaining = readDeadline - Date.now();
+    if (remaining <= 0)
+      throw new Error(`Probe deadline exceeded for ${registry} after ${attempt - 1} attempt(s)`);
+    // Cap each npm view call at 30s so a stalled call cannot consume the retry budget.
+    const timeout = Math.min(Number.isFinite(remaining) ? remaining : PER_CALL_TIMEOUT_MS, PER_CALL_TIMEOUT_MS);
+    const result = runNpm(
+      ["view", `${pack.name}@${pack.version}`, "dist.integrity", "repository.url", "dist.attestations.url", "--json", ...registryArgs(registry, pack.name)],
+      { encoding: "utf8", timeout }
+    );
+    const handled = handleProbeResult(result, registry, attempt, attempts, readDeadline, retryDelayMs);
+    if (handled !== undefined) return handled;
+  }
+}
+
+/** Compare a readback against the tested pack. Published versions are
+ * immutable, so identity, archive integrity, repository linkage and (for
+ * npm) the provenance attestation must match here — before any further
+ * upload — or the registries can never be brought back into agreement. */
+export function assertPublishedMatches(pack, published, registry, provenance) {
+  if (published.name !== pack.name || published.version !== pack.version || published.dist?.integrity !== pack.integrity)
+    throw new Error(`Package identity or archive integrity read back from ${registry} does not match the tested artifact`);
+  if (published.repository?.url !== expectedRepositoryUrl)
+    throw new Error(`Package read back from ${registry} is not linked to the expected repository`);
+  // Enforce the provenance promise: a release that reached npm without an
+  // attestation (OIDC misconfigured, or a manual upload racing the workflow)
+  // must fail here rather than ship unattested. GitHub Packages has no
+  // npm-style attestations, hence the provenance gate.
+  if (provenance && !published.dist?.attestations?.url)
+    throw new Error(`Package read back from ${registry} carries no signed provenance attestation; the npm publish must be attested (requires id-token: write and a configured trusted publisher)`);
+}
 
 /** Read pack-metadata JSON from stdin, failing fast when the tool is invoked
  * the old way (with a manifest path argument) or with a terminal on stdin

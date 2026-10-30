@@ -3,6 +3,58 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
+## Unreleased
+
+- Recover from npm's staged-version publish conflict by verifying instead of
+  matching error text. npm accepts a publish into a staging area and only
+  later exposes the version on its read path, so a `workflow_dispatch` rerun
+  inside that window probes the version as missing (E404 or an empty view)
+  and the re-upload collides with the version npm already staged — the 1.5.0
+  release hit exactly this after the release-triggered run lost the
+  propagation race, and the rerun failed at upload instead of at readback.
+  Because published versions are immutable, any upload failure now triggers
+  the same bounded readback (sharing the reader and
+  `VERIFY_ATTEMPTS`/`VERIFY_RETRY_DELAY_MS` settings as the verify step) and
+  the run continues only when that registry holds the exact tested artifact.
+  For npmjs this means integrity, repository linkage and the provenance
+  attestation; for GitHub Packages it means integrity and repository linkage
+  (npm-style attestations are not accepted there). Nothing is classified from
+  npm's error codes or wording (an unrelated `E409`, the staged wording under
+  a foreign code, and a GitHub Packages failure all take the same path); a
+  mismatch or a version that stays unreadable past the bound keeps the failure
+  wrapped with the upload error, so no remaining registry ever receives an
+  unretractable upload while another holds something unverified. The publish
+  step in the workflow gets the same 11 attempts × 10s window as readback for
+  that wait instead of the helper's 15s default. Interactive runs keep npm's
+  stdio on the attached terminal so an OTP or login prompt keeps working:
+  pack JSON arrives on stdin, so stdin is never a terminal — interactivity is
+  judged by the attached terminal and npm reads prompts from the controlling
+  terminal device (`/dev/tty`, or `CONIN$` on Windows), falling back to
+  captured output when no terminal input device can be opened rather than
+  handing npm the already-consumed stdin pipe.
+- Apply the provenance gate to already-readable versions in the publish
+  preflight as well, not only at readback: the probe now queries
+  `dist.attestations.url` alongside integrity and repository metadata (npm
+  projects field paths client-side, so an unattested version simply lacks
+  the key), and a version that reached npm without a signed attestation
+  aborts before another registry receives an unretractable upload — a
+  staged-unattested run that is retried once the version surfaces would
+  otherwise slip through preflight on its integrity match alone.
+- Retry transient failures in the preflight probe as well as the readback:
+  a rate limit (`E429`) or registry hiccup while probing no longer aborts
+  the publish before anything was uploaded. Both shared readers honour a
+  `Retry-After` hint from the error body when present (seconds, capped at
+  60s per attempt). The publish step enforces a 7-minute overall deadline
+  (capped from twice the configured retry window) so it and the separate
+  7-minute verify step both fit in the 15-minute job timeout; the verifier
+  uses its own 7-minute budget anchored to its start. Each retry is logged
+  with the registry and error code (no credentials).
+- When `VERIFY_RETRY_DELAY_MS=0` (tests, ad-hoc local runs), `Retry-After`
+  hints are ignored entirely and the bound is by attempt count alone.
+- Malformed or unparseable errors on non-zero exits now fail fast instead of
+  being retried; only exit 0 with empty stdout is treated as transient
+  propagation lag.
+
 ## [1.5.0] - 2026-10-29
 
 - Raise the seroval override floor from `^1.6.9` to `~1.6.11` (resolving
