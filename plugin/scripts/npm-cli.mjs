@@ -23,9 +23,12 @@ export function runNpm(args, options = {}) {
  * no prompt source at all, so callers fall back to capturing npm's output
  * instead of handing npm the already-consumed stdin pipe (which would read
  * EOF instead of the prompt response). The returned object includes a
- * bounded timeout so a stalled interactive publish cannot hang forever. */
+ * bounded timeout so a stalled interactive publish cannot hang forever.
+ *
+ * We attempt to open the controlling terminal even when stdout/stderr are
+ * not TTYs (e.g. piped through a logger), because the maintainer may still
+ * have a controlling terminal available for npm to read OTP/login prompts. */
 export function terminalStdio() {
-  if (!process.stderr.isTTY && !process.stdout.isTTY) return null;
   for (const device of ["/dev/tty", "CONIN$"]) {
     try { return { stdio: [fs.openSync(device, "r"), "inherit", "inherit"], timeout: 600000 }; } catch { /* try the next device */ }
   }
