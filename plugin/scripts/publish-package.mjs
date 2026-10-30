@@ -160,3 +160,8 @@ for (let i = 0; i < targets.length; i++) {
     throw new Error(`Package upload to ${registry} failed; ${error_.message}`);
   }
 }
+
+// Output the remaining job deadline for the verifier step.
+// The workflow captures this output and passes it to the verify step.
+const remainingMs = Math.max(0, jobDeadline - Date.now());
+console.log(`::set-output name=job-deadline-ms::${remainingMs}`);

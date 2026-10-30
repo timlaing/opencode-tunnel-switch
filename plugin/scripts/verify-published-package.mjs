@@ -3,12 +3,15 @@ import { assertPublishedMatches, readPackFromStdin, readPublishedVersion, retryS
 const [pack] = readPackFromStdin();
 const baseSettings = retrySettings();
 
-// Verify step gets the remaining job time (15 minutes total, publish step used some)
-// In practice, this is a separate run, so it gets its own 15-minute budget.
-// But to be safe, we use a 7-minute budget (matching stepBudget cap).
+// Verify step uses the remaining job time passed from the publish step.
+// If not provided (standalone run), fall back to 7-minute budget.
+const jobDeadlineMs = Number.parseInt(process.env.VERIFY_JOB_DEADLINE_MS ?? "", 10);
+const verifyBudgetMs = Number.isFinite(jobDeadlineMs) && jobDeadlineMs > 0 
+  ? Math.max(0, jobDeadlineMs - Date.now()) 
+  : 7 * 60 * 1000; // 7 minutes fallback
+
 const verifyStart = Date.now();
-const VERIFY_BUDGET_MS = 7 * 60 * 1000; // 7 minutes
-const verifySettings = createDeadlineSettings(baseSettings, verifyStart, VERIFY_BUDGET_MS);
+const verifySettings = createDeadlineSettings(baseSettings, verifyStart, verifyBudgetMs);
 
 for (const { registry, provenance } of targetRegistries) {
   // Reserve 1 minute for the other registry's read

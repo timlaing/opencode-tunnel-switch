@@ -111,6 +111,7 @@ jobs:
           # GitHub package visibility is managed separately from npm access.
           test "$(gh api users/timlaing/packages/npm/opencode-tunnel-switch --jq '.visibility')" = public
       - name: Publish the tested archive to both registries
+        id: publish
         working-directory: plugin
         # npm (registry.npmjs.org) authenticates through OIDC trusted
         # publishing: the package must list this repository and
@@ -132,8 +133,10 @@ jobs:
         # 15s default (observed on the first 1.4.3 publish, where uploads
         # succeeded but readback lost the race); allow 11 attempts 10s apart
         # here — ten retry intervals, ~100s between the first and last read.
+        # Use the remaining job time passed from the publish step.
         run: npm run verify:published < plugin-pack.json
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERIFY_ATTEMPTS: '11'
           VERIFY_RETRY_DELAY_MS: '10000'
+          VERIFY_JOB_DEADLINE_MS: ${{ steps.publish.outputs.job-deadline-ms }}
