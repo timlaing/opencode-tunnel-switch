@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { RGBA } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 import type { Context, SlotClaim, KeymapLayer } from "@opencode/plugin/tui/context";
 import plugin from "../src/tui.js";
@@ -24,7 +25,9 @@ globalThis.fetch = ((url, init) => {
 }) as typeof fetch;
 const cleanup = await plugin.setup({
   options: { apiToken: "test-token" },
-  theme: { text: { base: "#ffffff", muted: "#aaaaaa" } },
+  // The host hands over RGBA instances for theme tokens (and the plugin must
+  // also tolerate strings), so exercise both shapes.
+  theme: { text: { base: RGBA.fromHex("#ffffff"), muted: "#aaaaaa" } },
   ui: { slot(value: SlotClaim) { claim = value; return () => { removed = true; }; } },
   keymap: { layer(factory: () => KeymapLayer) { layer = factory(); } },
 } as unknown as Context);

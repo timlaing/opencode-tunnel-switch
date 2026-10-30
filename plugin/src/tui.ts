@@ -90,10 +90,22 @@ export default Plugin.define({
     // Follow the MCP sidebar's conventions: <text fg> for whole-line colours,
     // style={{ fg }} on <span> for inline runs (a bare fg prop on a span is
     // silently dropped by the reconciler), theme feedback colours for states.
+    // Theme tokens are RGBA instances from the host's @opentui/core, never
+    // strings: read them structurally (no runtime import, which would load a
+    // second @opentui/core copy) and convert to the hex form the reconciler
+    // parses. RGBA.toString() is rgba(...) — not a parseable input — so take
+    // the integer channels directly.
     const themed = (path: readonly string[], fallback: string): string => {
       let current: unknown = ctx.theme;
       for (const key of path) current = (current as Record<string, unknown> | undefined)?.[key];
-      return typeof current === "string" ? current : fallback;
+      if (typeof current === "string") return current;
+      const ints = (current as { toInts?: () => unknown } | undefined)?.toInts?.();
+      if (Array.isArray(ints) && ints.length >= 3 && ints.slice(0, 3).every((v) => typeof v === "number")) {
+        const [r, g, b] = ints as [number, number, number];
+        const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
+        return `#${byte(r)}${byte(g)}${byte(b)}`;
+      }
+      return fallback;
     };
     const base = themed(["text", "base"], "#ffffff");
     const muted = themed(["text", "muted"], "#868895");

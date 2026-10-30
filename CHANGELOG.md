@@ -5,6 +5,15 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+- Use the active theme's colours in the tunnel sidebar instead of the
+  hardcoded Catppuccin fallbacks. Theme tokens are `@opentui/core` `RGBA`
+  instances, but `themed()` only accepted strings, so every lookup missed
+  and base/muted/success/warning/error always fell back to their defaults;
+  it now reads `toInts()` structurally (no runtime `@opentui/core` import,
+  which would load a second copy) and converts to hex, while still
+  accepting string values. Note `RGBA.toString()` yields `rgba(...)`, which
+  the reconciler cannot parse, so the integer channels are used directly.
+
 ## [1.6.0] - 2026-10-30
 
 - Recover from npm's staged-version publish conflict by verifying instead of

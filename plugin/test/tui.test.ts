@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { TextAttributes } from "@opentui/core";
+import { RGBA, TextAttributes } from "@opentui/core";
 import { testRender } from "@opentui/solid";
 import type { Context, KeymapLayer, SlotClaim } from "@opencode/plugin/tui/context";
 import plugin from "../src/tui.js";
@@ -235,6 +235,41 @@ test("tunnel-switch sidebar", async (t) => {
           await h.layer?.commands?.[0].run();
           await view.renderOnce();
           assert.equal(hex(span(view, "disconnected").fg), "#ff0000");
+        } finally {
+          view.renderer.destroy();
+        }
+      } finally {
+        h.dispose();
+      }
+    });
+
+    // The host resolves theme tokens to RGBA instances, never hex strings;
+    // the sidebar must convert them (hex in, same hex out) end to end.
+    await t.test("renders RGBA theme tokens as the host supplies them", async () => {
+      reset();
+      const h = await start({ apiToken: "test-token" }, {
+        text: {
+          base: RGBA.fromHex("#f4ede8"), muted: RGBA.fromHex("#7d7385"),
+          feedback: {
+            success: { base: RGBA.fromHex("#40a02b") },
+            warning: { base: RGBA.fromHex("#df8e1d") },
+            error: { base: RGBA.fromHex("#d20f39") },
+          },
+        },
+      });
+      try {
+        await h.layer?.commands?.[0].run();
+        const view = await openView(h.claim!);
+        try {
+          await view.renderOnce();
+          assert.equal(hex(span(view, "Tunnel").fg), "#f4ede8");
+          assert.equal(hex(span(view, "reachable").fg), "#40a02b");
+          assert.equal(hex(span(view, "connected").fg), "#40a02b");
+          assert.equal(hex(span(view, "example-server").fg), "#7d7385");
+          state = "rotating";
+          await h.layer?.commands?.[0].run();
+          await view.renderOnce();
+          assert.equal(hex(span(view, "rotating").fg), "#df8e1d");
         } finally {
           view.renderer.destroy();
         }
