@@ -3,7 +3,7 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
-## Unreleased
+## [1.6.1] - 2026-10-30
 
 - Use the active theme's colours in the tunnel sidebar instead of the
   hardcoded Catppuccin fallbacks. Theme tokens are `@opentui/core` `RGBA`
@@ -13,6 +13,12 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
   which would load a second copy) and converts to hex, while still
   accepting string values. Note `RGBA.toString()` yields `rgba(...)`, which
   the reconciler cannot parse, so the integer channels are used directly.
+  Alpha survives too: a translucent token is emitted as 8-digit hex, which
+  the reconciler parses, rather than being flattened to opaque. The five
+  palette tokens are read per use rather than captured in `setup()`, so a
+  theme switch reaches the sidebar on the next render. `test:tui` now
+  feeds non-fallback colours and asserts the rendered span foregrounds,
+  so a broken conversion fails the gate instead of passing on defaults.
 
 ## [1.6.0] - 2026-10-30
 
