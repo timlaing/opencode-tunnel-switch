@@ -5,6 +5,8 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 ## Unreleased
 
+## [1.6.0] - 2026-10-30
+
 - Recover from npm's staged-version publish conflict by verifying instead of
   matching error text. npm accepts a publish into a staging area and only
   later exposes the version on its read path, so a `workflow_dispatch` rerun
