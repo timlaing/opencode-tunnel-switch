@@ -26,8 +26,10 @@ globalThis.fetch = ((url, init) => {
 const cleanup = await plugin.setup({
   options: { apiToken: "test-token" },
   // The host hands over RGBA instances for theme tokens (and the plugin must
-  // also tolerate strings), so exercise both shapes.
-  theme: { text: { base: RGBA.fromHex("#ffffff"), muted: "#aaaaaa" } },
+  // also tolerate strings), so exercise both shapes. Neither colour matches
+  // the plugin's fallbacks: a broken RGBA conversion must fail here, not
+  // silently render the defaults.
+  theme: { text: { base: RGBA.fromHex("#f4ede8"), muted: "#aaaaaa" } },
   ui: { slot(value: SlotClaim) { claim = value; return () => { removed = true; }; } },
   keymap: { layer(factory: () => KeymapLayer) { layer = factory(); } },
 } as unknown as Context);
@@ -43,6 +45,18 @@ try {
     return line.trimEnd();
   };
   assert.match(frame, /▼ Tunnel/);
+  // Colour check: the RGBA base token must reach the rendered spans as hex
+  // (the harness only captures frames otherwise, which would let a broken
+  // conversion fall back unnoticed).
+  const fgHex = (text: string): string => {
+    const match = view.captureSpans().lines.flatMap((line) => line.spans)
+      .find((candidate) => candidate.text === text);
+    assert.ok(match, `missing span ${JSON.stringify(text)}`);
+    const { r, g, b } = match.fg;
+    return `#${[r, g, b].map((part) => Math.round(part * 255).toString(16).padStart(2, "0")).join("")}`;
+  };
+  assert.equal(fgHex("Tunnel"), "#f4ede8");
+  assert.equal(fgHex("example-server"), "#aaaaaa");
   assert.ok(row(frame, "API").endsWith("reachable"), row(frame, "API"));
   assert.ok(row(frame, "Server").endsWith("example-server"), row(frame, "Server"));
   assert.ok(row(frame, "Proxy").endsWith("127.0.0.1:9988"), row(frame, "Proxy"));

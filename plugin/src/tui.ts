@@ -94,37 +94,42 @@ export default Plugin.define({
     // strings: read them structurally (no runtime import, which would load a
     // second @opentui/core copy) and convert to the hex form the reconciler
     // parses. RGBA.toString() is rgba(...) — not a parseable input — so take
-    // the integer channels directly.
+    // the integer channels directly; the reconciler accepts 6-digit hex and
+    // keeps translucency with 8-digit, so alpha survives when not opaque.
     const themed = (path: readonly string[], fallback: string): string => {
       let current: unknown = ctx.theme;
       for (const key of path) current = (current as Record<string, unknown> | undefined)?.[key];
       if (typeof current === "string") return current;
       const ints = (current as { toInts?: () => unknown } | undefined)?.toInts?.();
-      if (Array.isArray(ints) && ints.length >= 3 && ints.slice(0, 3).every((v) => typeof v === "number")) {
-        const [r, g, b] = ints as [number, number, number];
+      if (Array.isArray(ints) && ints.length >= 3 && ints.every((v) => typeof v === "number")) {
+        const [r, g, b, a = 255] = ints as number[];
         const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
-        return `#${byte(r)}${byte(g)}${byte(b)}`;
+        const rgb = `${byte(r)}${byte(g)}${byte(b)}`;
+        return a >= 255 ? `#${rgb}` : `#${rgb}${byte(a)}`;
       }
       return fallback;
     };
-    const base = themed(["text", "base"], "#ffffff");
-    const muted = themed(["text", "muted"], "#868895");
-    const positive = themed(["text", "feedback", "success", "base"], "#a6e3a1");
-    const warning = themed(["text", "feedback", "warning", "base"], "#f9e2af");
-    const negative = themed(["text", "feedback", "error", "base"], "#f38ba8");
+    // Thunks, not snapshots: the host can swap ctx.theme when the active
+    // theme changes, so every use re-reads and the next render (the poll
+    // refreshes one at worst) picks the new palette up.
+    const base = () => themed(["text", "base"], "#ffffff");
+    const muted = () => themed(["text", "muted"], "#868895");
+    const positive = () => themed(["text", "feedback", "success", "base"], "#a6e3a1");
+    const warning = () => themed(["text", "feedback", "warning", "base"], "#f9e2af");
+    const negative = () => themed(["text", "feedback", "error", "base"], "#f38ba8");
     // A row: bold title in the theme's base colour, two-space indented and
     // without a colon; value flush right (muted or state-coloured), matching
     // the sibling sidebars' label/value layout.
     const line = (label: string, value: string | (() => string), colour?: string, suffix?: string) =>
       jsx("box", { flexDirection: "row", gap: 1, minWidth: 0, get children() { return [
-        jsx("text", { fg: base, wrapMode: "none", truncate: true, flexGrow: 1, flexShrink: 1, minWidth: 0,
+        jsx("text", { fg: base(), wrapMode: "none", truncate: true, flexGrow: 1, flexShrink: 1, minWidth: 0,
           get children() { return jsx("b", { children: `  ${label}` }); } }),
         jsx("text", { wrapMode: "none", truncate: true, flexShrink: 0, get children() {
           const children = [jsx("span", {
-            style: { fg: colour ?? muted },
+            style: { fg: colour ?? muted() },
             get children() { return typeof value === "function" ? value() : value; },
           })];
-          if (suffix) children.push(jsx("span", { style: { fg: muted }, children: suffix }));
+          if (suffix) children.push(jsx("span", { style: { fg: muted() }, children: suffix }));
           return children;
         } }),
       ]; } });
@@ -145,9 +150,9 @@ export default Plugin.define({
     };
     // Feedback colour for a tunnel state.
     const stateColour = (state: TunnelStatus["state"]): string => {
-      if (state === "connected") return positive;
-      if (state === "rotating") return warning;
-      return negative;
+      if (state === "connected") return positive();
+      if (state === "rotating") return warning();
+      return negative();
     };
     const client = makeClient(options, options.apiToken);
     const [snapshot, setSnapshot] = createSignal<{
@@ -173,18 +178,18 @@ export default Plugin.define({
               const open = expanded();
               // Collapsible header, toggled by clicking like the MCP sidebar box.
               const header = jsx("box", { flexDirection: "row", gap: 1, onMouseDown: () => setExpanded(!open), get children() { return [
-                jsx("text", { fg: base, children: open ? "▼" : "▶" }),
-                jsx("text", { fg: base, get children() {
+                jsx("text", { fg: base(), children: open ? "▼" : "▶" }),
+                jsx("text", { fg: base(), get children() {
                   const children = [jsx("b", { children: "Tunnel" })];
-                  if (!open) children.push(jsx("span", { style: { fg: muted },
+                  if (!open) children.push(jsx("span", { style: { fg: muted() },
                     children: collapsedSummary(status?.server, checked, available) }));
                   return children;
                 } }),
               ]; } });
               if (!open) return [header];
-              if (!checked) return [header, jsx("text", { fg: muted, children: "Checking status…" })];
+              if (!checked) return [header, jsx("text", { fg: muted(), children: "Checking status…" })];
               const lines = [
-                line("API", available ? "reachable" : "unavailable", available ? positive : negative),
+                line("API", available ? "reachable" : "unavailable", available ? positive() : negative()),
               ];
               if (status) {
                 lines.push(
@@ -197,7 +202,7 @@ export default Plugin.define({
                 );
               }
               // The relative age stays muted (the default value colour) between polls.
-              lines.push(line("Checked", () => formatAge(checked, clock()), muted));
+              lines.push(line("Checked", () => formatAge(checked, clock()), muted()));
               return [header, ...lines];
             } });
           } catch {
