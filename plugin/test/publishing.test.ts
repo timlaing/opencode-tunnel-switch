@@ -57,6 +57,21 @@ console.log(JSON.stringify({
     ? { 'dist.attestations.url': 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing%2fopencode-tunnel-switch@0.1.0' }
     : {}),
 }));
+// Post-upload readback verification (view --json without field args): serve the full document.
+if (process.argv.includes('--json') && !process.argv.includes('dist.integrity')) {
+  console.log(JSON.stringify({
+    name: '@timlaing/opencode-tunnel-switch',
+    version: '0.1.0',
+    dist: {
+      integrity: state === 'same' || state === 'badrepo' || state === 'unattested' ? 'sha512-tested' : 'sha512-different',
+      ...(isNpmjs && state !== 'unattested'
+        ? { attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing%2fopencode-tunnel-switch@0.1.0' } }
+        : {}),
+    },
+    repository: { url: state === 'badrepo' ? 'git+https://github.com/example/other.git' : 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+  }));
+  process.exit(0);
+}
 `, { mode: 0o755 });
     try {
       const env: NodeJS.ProcessEnv = {
@@ -184,10 +199,10 @@ if (isNpmjs && publishMode && publishMode.startsWith('staged')) {
   }));
   process.exit(0);
 }
-// For readback verification after successful upload (view --json), serve the
+// For readback verification after successful upload (view --json without field args), serve the
 // staged document if the staged version has already surfaced (counter > 0).
-// This applies to both npmjs and GitHub Packages.
-if (publishMode && publishMode.startsWith('staged') && process.argv.includes('--json')) {
+// This applies to npmjs (staged) and GitHub Packages (ok).
+if ((publishMode && (publishMode.startsWith('staged') || publishMode === 'ok')) && process.argv.includes('--json') && !process.argv.includes('dist.integrity')) {
   try { 
     const n = Number(fs.readFileSync(process.env.TEST_NPM_COUNT, 'utf8') || 0); 
     if (n > 0) {
@@ -294,6 +309,21 @@ if (process.argv.includes('dist.integrity')) {
     process.exit(1);
   }
 }
+// Post-upload readback verification (view --json without field args): serve the version.
+// npmjs needs attestations; GitHub Packages doesn't.
+if (process.argv.includes('--json') && !process.argv.includes('dist.integrity')) {
+  const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+  console.log(JSON.stringify({
+    name: '@timlaing/opencode-tunnel-switch',
+    version: '0.1.0',
+    dist: {
+      integrity: 'sha512-tested',
+      ...(isNpmjs ? { attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing/opencode-tunnel-switch@0.1.0' } } : {}),
+    },
+    repository: { url: 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+  }));
+  process.exit(0);
+}
 console.log(JSON.stringify({ error: { code: 'E404' } }));
 process.exit(1);
 `, { mode: 0o755 });
@@ -329,6 +359,20 @@ test("npm provenance is requested only for the npm registry in CI", () => {
 const fs = require('node:fs');
 fs.appendFileSync(process.env.TEST_NPM_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
 if (process.argv[2] === 'publish') process.exit(0);
+// Post-upload readback verification (view --json without field args): serve the version.
+if (process.argv.includes('--json') && !process.argv.includes('dist.integrity')) {
+  const isNpmjs = process.argv.includes('--registry=https://registry.npmjs.org');
+  console.log(JSON.stringify({
+    name: '@timlaing/opencode-tunnel-switch',
+    version: '0.1.0',
+    dist: {
+      integrity: 'sha512-tested',
+      ...(isNpmjs ? { attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@timlaing/opencode-tunnel-switch@0.1.0' } } : {}),
+    },
+    repository: { url: 'git+https://github.com/timlaing/opencode-tunnel-switch.git' },
+  }));
+  process.exit(0);
+}
 console.log(JSON.stringify({ error: { code: 'E404' } }));
 process.exit(1);
 `, { mode: 0o755 });

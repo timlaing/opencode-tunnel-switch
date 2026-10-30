@@ -44,10 +44,11 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
   a rate limit (`E429`) or registry hiccup while probing no longer aborts
   the publish before anything was uploaded. Both shared readers honour a
   `Retry-After` hint from the error body when present (seconds, capped at
-  60s per attempt) and enforce a wall-clock deadline of twice the configured
-  window per run (not per read), so hint waits cannot multiply into the
-  workflow's 15-minute job timeout. Each retry is logged with the registry
-  and error code (no credentials).
+  60s per attempt). The publish step enforces a 7-minute overall deadline
+  (capped from twice the configured retry window) so it and the separate
+  7-minute verify step both fit in the 15-minute job timeout; the verifier
+  uses its own 7-minute budget anchored to its start. Each retry is logged
+  with the registry and error code (no credentials).
 - When `VERIFY_RETRY_DELAY_MS=0` (tests, ad-hoc local runs), `Retry-After`
   hints are ignored entirely and the bound is by attempt count alone.
 - Malformed or unparseable errors on non-zero exits now fail fast instead of

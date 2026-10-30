@@ -110,7 +110,23 @@ for (let i = 0; i < targets.length; i++) {
       if (upload.stdout) process.stdout.write(upload.stdout);
       if (upload.stderr) process.stderr.write(upload.stderr);
     }
-    if (upload.status === 0) continue;
+    if (upload.status === 0) {
+      // Upload succeeded: verify via readback BEFORE starting next registry.
+      // Reserve time for remaining registries' verification (1 min each).
+      const remainingToVerify = targets.slice(i + 1).filter(t => t.integrity === null).length;
+      const verifyReservedMs = remainingToVerify * 60000;
+      const verifyDeadline = Math.min(publishStepDeadline - recoveryReservedMs, Date.now() + baseSettings.perReadBudget);
+      const verifySettings = { ...baseSettings, stepDeadline: Math.min(publishStepDeadline, verifyDeadline) };
+      
+      try {
+        const published = readPublishedVersion(registry, pack, verifySettings);
+        assertPublishedMatches(pack, published, registry, provenance);
+        console.log(`${pack.name}@${pack.version} on ${registry} verified after upload; integrity, repository and attestation confirmed.`);
+        continue;
+      } catch (error_) {
+        throw new Error(`Upload to ${registry} succeeded but readback verification failed; ${error_.message}`);
+      }
+    }
     // Upload failed (or timed out). Fall through to verification readback.
   }
   
