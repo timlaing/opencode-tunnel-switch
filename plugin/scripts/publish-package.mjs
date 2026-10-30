@@ -113,7 +113,6 @@ for (let i = 0; i < targets.length; i++) {
     if (upload.status === 0) {
       // Upload succeeded: verify via readback BEFORE starting next registry.
       // Reserve time for remaining registries' verification (1 min each).
-      const remainingToVerify = targets.slice(i + 1).filter(t => t.integrity === null).length;
       const verifyDeadline = Math.min(publishStepDeadline - recoveryReservedMs, Date.now() + baseSettings.perReadBudget);
       const verifySettings = { ...baseSettings, stepDeadline: Math.min(publishStepDeadline, verifyDeadline) };
       
