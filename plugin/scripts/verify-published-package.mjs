@@ -3,10 +3,10 @@ import { assertPublishedMatches, readPackFromStdin, readPublishedVersion, retryS
 const [pack] = readPackFromStdin();
 const baseSettings = retrySettings();
 
-// Verify step uses the remaining job time passed from the publish step.
+// Verify step uses the absolute job deadline passed from the publish step.
 // If not provided (standalone run), fall back to 7-minute budget.
 const jobDeadlineMs = Number.parseInt(process.env.VERIFY_JOB_DEADLINE_MS ?? "", 10);
-const verifyBudgetMs = Number.isFinite(jobDeadlineMs) && jobDeadlineMs > 0 
+const verifyBudgetMs = Number.isFinite(jobDeadlineMs) && jobDeadlineMs > Date.now() 
   ? Math.max(0, jobDeadlineMs - Date.now()) 
   : 7 * 60 * 1000; // 7 minutes fallback
 

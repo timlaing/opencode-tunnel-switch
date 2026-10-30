@@ -161,7 +161,5 @@ for (let i = 0; i < targets.length; i++) {
   }
 }
 
-// Output the remaining job deadline for the verifier step.
-// The workflow captures this output and passes it to the verify step.
-const remainingMs = Math.max(0, jobDeadline - Date.now());
-console.log(`::set-output name=job-deadline-ms::${remainingMs}`);
+// Output the absolute job deadline for the verifier step.
+console.log(`::set-output name=job-deadline-ms::${jobDeadline}`);
