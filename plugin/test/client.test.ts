@@ -5,7 +5,9 @@ import { Options, RotationRateLimit, detector, makeClient } from "../src/client.
 test("matches the reported error only for allowed providers and statuses", () => {
   const detect = detector(Options.parse({ apiToken: "secret" }));
   const error = { type: "provider.rate-limit", message: "Error: Rate limit exceeded. Please try again later.", status: 429 };
-  assert.equal(detect("opencode", error), true);
+  const matched = detect("opencode", error);
+  assert.ok(matched, "expected pattern to match");
+  assert.equal(matched, "rate limit exceeded\\. please try again later");
   assert.equal(detect("other", error), false);
   assert.equal(detect("opencode", { ...error, status: 500 }), false);
   assert.equal(detect("opencode", { ...error, message: "Temporary capacity error" }), false);
@@ -78,3 +80,20 @@ for (const [header, expected] of [
       && error.retryAfterMs === expected);
   });
 }
+
+test("rotate sends the reason as a JSON body with a Content-Type header", async () => {
+  let captured: RequestInit | undefined;
+  const fetcher: typeof fetch = async (_url, init) => {
+    captured = init;
+    return new Response('{"connection_id":"new"}');
+  };
+  const client = makeClient(Options.parse({ apiToken: "secret" }), "secret", fetcher);
+  await client.rotate("test-reason");
+  assert.equal(captured?.body, JSON.stringify({ reason: "test-reason" }));
+  assert.equal((captured?.headers as Record<string, string>)["Content-Type"], "application/json");
+});
+
+test("returns the configured pattern that matched", () => {
+  const detect = detector(Options.parse({ apiToken: "secret", patterns: ["alpha limit", "beta limit"] }));
+  assert.equal(detect("opencode", { type: "provider.rate-limit", message: "alpha limit reached", status: 429 }), "alpha limit");
+});
