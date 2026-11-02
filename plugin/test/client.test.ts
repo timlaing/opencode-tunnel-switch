@@ -5,7 +5,9 @@ import { Options, RotationRateLimit, detector, makeClient } from "../src/client.
 test("matches the reported error only for allowed providers and statuses", () => {
   const detect = detector(Options.parse({ apiToken: "secret" }));
   const error = { type: "provider.rate-limit", message: "Error: Rate limit exceeded. Please try again later.", status: 429 };
-  assert.equal(detect("opencode", error), true);
+  const matched = detect("opencode", error);
+  assert.ok(matched, "expected pattern to match");
+  assert.equal(typeof matched, "string");
   assert.equal(detect("other", error), false);
   assert.equal(detect("opencode", { ...error, status: 500 }), false);
   assert.equal(detect("opencode", { ...error, message: "Temporary capacity error" }), false);

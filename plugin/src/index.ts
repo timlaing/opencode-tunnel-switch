@@ -27,15 +27,17 @@ export default Plugin.define({
           rateLimitedSessions.delete(event.sessionID);
           return;
         }
-        if (!matches(event.model.providerID, event.error)) return;
+        const matchedPattern = matches(event.model.providerID, event.error);
+        if (!matchedPattern) return;
         // A rate-limited switch only delays the work; do not attempt another switch in this retry sequence.
         if (event.attempt === 1) rateLimitedSessions.delete(event.sessionID);
         else if (rateLimitedSessions.delete(event.sessionID)) return;
+        const reason = `rule triggered: ${matchedPattern}; content: ${event.error.type}: ${event.error.message}`;
         try {
-          const status = await client.rotate();
+          const status = await client.rotate(reason);
           event.decision = { retry: true, delay: 1000 };
           // Return the retry decision immediately so status rendering cannot hold up continuation.
-          void Promise.resolve().then(() => ctx.session.synthetic({ sessionID: event.sessionID, text: `SSH tunnel rotated: ${status}. Continuing the current work.` }))
+          void Promise.resolve().then(() => ctx.session.synthetic({ sessionID: event.sessionID, text: `SSH tunnel rotated: ${status} (reason: ${reason}). Continuing the current work.` }))
             .catch((error) => console.error("[tunnel-switch] Could not display rotation status", String(error)));
         } catch (error) {
           if (error instanceof RotationRateLimit) {

@@ -29,9 +29,15 @@ export class RotationRateLimit extends Error {
 /** Match configured exhaustion errors only for permitted providers and HTTP statuses. */
 export function detector(options: OptionsType) {
   const patterns = options.patterns.map((pattern) => new RegExp(pattern, "i"));
-  return (provider: string, error: Failure) => options.providers.includes(provider)
-    && (error.status === undefined || [402, 403, 429].includes(error.status))
-    && patterns.some((pattern) => pattern.test(`${error.type}: ${error.message}`));
+  return (provider: string, error: Failure) => {
+    if (!options.providers.includes(provider)) return false;
+    if (error.status !== undefined && ![402, 403, 429].includes(error.status)) return false;
+    const errorText = `${error.type}: ${error.message}`;
+    for (const pattern of patterns) {
+      if (pattern.test(errorText)) return pattern.source;
+    }
+    return false;
+  };
 }
 
 /** Parse Retry-After as seconds or an HTTP date, retaining a bounded fallback. */
@@ -49,13 +55,14 @@ export function makeClient(options: OptionsType, token: string, fetcher: typeof 
   let pending: Promise<string> | undefined;
   let lastRotation = -Infinity;
   /** Call the control API directly and expose 429 retry delays to the work retry hook. */
-  async function call(path: string, method: string) {
+  async function call(path: string, method: string, body?: string) {
     const init: RequestInit & { proxy: false } = {
       // Bun fetch must reach the control API even while the SSH tunnel is down.
       proxy: false,
-      method, headers: { Authorization: `Bearer ${token}` },
+      method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       signal: AbortSignal.timeout(options.timeoutMs), redirect: "error",
     };
+    if (body) init.body = body;
     const response = await fetcher(new URL(path, base), init);
     if (!response.ok) {
       const message = `Tunnel API ${response.status}: ${await response.text()}`;
@@ -70,12 +77,13 @@ export function makeClient(options: OptionsType, token: string, fetcher: typeof 
     /** Read tunnel status without rotating or using the tunnel proxy. */
     status: () => call("status", "GET"),
     /** Attempt one rotation, sharing in-flight calls and reporting remaining cooldowns. */
-    rotate: () => {
+    rotate: (reason?: string) => {
       if (pending) return pending;
       const remaining = options.cooldownMs - (Date.now() - lastRotation);
       if (remaining > 0) return Promise.reject(new RotationRateLimit("Tunnel rotation cooldown active", remaining));
       lastRotation = Date.now();
-      pending = call("rotate", "POST").finally(() => { pending = undefined; });
+      const body = reason ? JSON.stringify({ reason }) : undefined;
+      pending = call("rotate", "POST", body).finally(() => { pending = undefined; });
       return pending;
     },
   };
