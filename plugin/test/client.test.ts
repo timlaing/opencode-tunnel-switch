@@ -80,3 +80,20 @@ for (const [header, expected] of [
       && error.retryAfterMs === expected);
   });
 }
+
+test("rotate sends the reason as a JSON body with a Content-Type header", async () => {
+  let captured: RequestInit | undefined;
+  const fetcher: typeof fetch = async (_url, init) => {
+    captured = init;
+    return new Response('{"connection_id":"new"}');
+  };
+  const client = makeClient(Options.parse({ apiToken: "secret" }), "secret", fetcher);
+  await client.rotate("test-reason");
+  assert.equal(captured?.body, JSON.stringify({ reason: "test-reason" }));
+  assert.equal((captured?.headers as Record<string, string>)["Content-Type"], "application/json");
+});
+
+test("returns the configured pattern that matched", () => {
+  const detect = detector(Options.parse({ apiToken: "secret", patterns: ["alpha limit", "beta limit"] }));
+  assert.equal(detect("opencode", { type: "provider.rate-limit", message: "alpha limit reached", status: 429 }), "alpha limit");
+});
