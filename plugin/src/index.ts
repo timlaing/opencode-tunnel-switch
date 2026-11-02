@@ -32,7 +32,9 @@ export default Plugin.define({
         // A rate-limited switch only delays the work; do not attempt another switch in this retry sequence.
         if (event.attempt === 1) rateLimitedSessions.delete(event.sessionID);
         else if (rateLimitedSessions.delete(event.sessionID)) return;
-        const reason = `rule triggered: ${matchedPattern}; content: ${event.error.type}: ${event.error.message}`;
+        // Normalize error message: trim, collapse whitespace, truncate to 500 chars.
+        const msg = event.error.message.trim().replace(/\s+/g, " ").slice(0, 500);
+        const reason = `rule triggered: ${matchedPattern}; content: ${event.error.type}: ${msg}`;
         try {
           const status = await client.rotate(reason);
           event.decision = { retry: true, delay: 1000 };

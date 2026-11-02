@@ -56,11 +56,15 @@ export function makeClient(options: OptionsType, token: string, fetcher: typeof 
   let lastRotation = -Infinity;
   /** Call the control API directly and expose 429 retry delays to the work retry hook. */
   async function call(path: string, method: string, body?: string) {
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (body) headers["Content-Type"] = "application/json";
     const init: RequestInit & { proxy: false } = {
       // Bun fetch must reach the control API even while the SSH tunnel is down.
       proxy: false,
-      method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(options.timeoutMs), redirect: "error",
+      method,
+      headers,
+      signal: AbortSignal.timeout(options.timeoutMs),
+      redirect: "error",
     };
     if (body) init.body = body;
     const response = await fetcher(new URL(path, base), init);

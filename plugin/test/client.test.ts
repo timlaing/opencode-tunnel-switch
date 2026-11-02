@@ -7,7 +7,7 @@ test("matches the reported error only for allowed providers and statuses", () =>
   const error = { type: "provider.rate-limit", message: "Error: Rate limit exceeded. Please try again later.", status: 429 };
   const matched = detect("opencode", error);
   assert.ok(matched, "expected pattern to match");
-  assert.equal(typeof matched, "string");
+  assert.equal(matched, "rate limit exceeded\\. please try again later");
   assert.equal(detect("other", error), false);
   assert.equal(detect("opencode", { ...error, status: 500 }), false);
   assert.equal(detect("opencode", { ...error, message: "Temporary capacity error" }), false);
