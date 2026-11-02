@@ -3,6 +3,10 @@
 This repository releases the OpenCode plugin. The Python server is now maintained
 separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch).
 
+## [1.7.0] - 2026-11-02
+
+- Include the rotation reason in the API call and log it: `detector()` now returns the matched pattern source string, `rotate()` accepts an optional `reason` parameter and sends it in the POST body, and `index.ts` captures the matched pattern to construct a complete reason (rule triggered + content) which is logged in a synthetic message displayed to the user.
+
 ## [1.6.1] - 2026-10-30
 
 - Use the active theme's colours in the tunnel sidebar instead of the
