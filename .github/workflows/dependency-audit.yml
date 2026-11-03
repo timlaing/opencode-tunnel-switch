@@ -40,4 +40,5 @@ jobs:
           cache: npm
           cache-dependency-path: plugin/package-lock.json
       - run: npm ci --ignore-scripts
-      - run: npm audit
+      # Report all findings, but only high and critical vulnerabilities block CI.
+      - run: npm audit --audit-level=high

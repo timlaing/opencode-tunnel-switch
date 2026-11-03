@@ -6,6 +6,7 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 ## Unreleased
 
 - Pin the Dependabot metadata action to an immutable commit to secure automated dependency approvals and resolve the Sonar security gate.
+- Keep all dependency audit findings visible, but fail CI only for high or critical vulnerabilities.
 
 ## [1.7.0] - 2026-11-02
 
