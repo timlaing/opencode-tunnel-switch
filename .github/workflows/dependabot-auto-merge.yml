@@ -14,8 +14,6 @@ on:
         "Stale issues and pull requests",
       ]
     types: [completed]
-  schedule:
-    - cron: "11,26,41,56 * * * *"
   workflow_dispatch:
 
 permissions: {}

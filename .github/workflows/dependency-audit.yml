@@ -11,8 +11,6 @@ on:
   # required status check; a paths filter here leaves PRs that don't touch the
   # lockfile permanently blocked on a check that never registers.
   pull_request:
-  schedule:
-    - cron: '0 9 * * 1'
   workflow_dispatch:
 
 permissions:
