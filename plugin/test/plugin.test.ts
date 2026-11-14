@@ -91,18 +91,49 @@ for (const [description, response] of [
   });
 }
 
-test("configureProxy false skips startup discovery", async () => {
+test("configureProxy false skips startup discovery and auto-reconnect", async () => {
   const originalFetch = globalThis.fetch;
   const originalEnv = { ...process.env };
-  globalThis.fetch = async () => assert.fail("No startup request when proxy setup is disabled");
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls++;
+    return new Response("unexpected watcher request", { status: 503 });
+  };
   const ctx = {
-    options: { apiToken: "secret", configureProxy: false },
+    options: { apiToken: "secret", configureProxy: false, reconnectMs: 0 },
     session: { hook: async () => {} }, command: { transform: async () => {} },
   } as unknown as Parameters<typeof plugin.setup>[0];
   try {
     const cleanup = await plugin.setup(ctx);
     if (typeof cleanup === "function") await cleanup();
     assert.deepEqual({ ...process.env }, originalEnv);
+    assert.equal(fetchCalls, 0);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("auto-reconnect polls status on setup and stops when the plugin unloads", async () => {
+  const originalFetch = globalThis.fetch;
+  let statusCalls = 0;
+  let release!: (value: string) => void;
+  globalThis.fetch = async () => {
+    statusCalls++;
+    return new Promise<Response>(resolve => {
+      release = body => resolve(new Response(JSON.stringify({ state: "connected", connection_id: "cid",
+        started_at: "2026-10-15T10:00:00Z", http_proxy: { enabled: true, ip: "127.0.0.1", port: 9988 } })));
+    });
+  };
+  const ctx = {
+    options: { apiToken: "secret", configureProxy: false, reconnectMs: 10000 },
+    session: { hook: async () => {} }, command: { transform: async () => {} },
+  } as unknown as Parameters<typeof plugin.setup>[0];
+  let cleanup: Awaited<ReturnType<typeof plugin.setup>> = undefined;
+  try {
+    cleanup = await plugin.setup(ctx);
+    assert.equal(statusCalls, 1);
+    release("connected");
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (typeof cleanup === "function") await cleanup();
+    assert.equal(statusCalls, 1);
   } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -153,7 +184,7 @@ test("rate-limited switch retries only the work after Retry-After", async () => 
     return new Response("Switch already in progress", { status: 429, headers: { "Retry-After": "7" } });
   };
   const ctx = {
-    options: { apiToken: "secret", configureProxy: false },
+    options: { apiToken: "secret", configureProxy: false, reconnectMs: 0 },
     session: { hook: async (_name: string, callback: typeof hook) => { hook = callback; } },
     command: { transform: async () => {} },
   } as unknown as Parameters<typeof plugin.setup>[0];

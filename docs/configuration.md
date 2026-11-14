@@ -38,10 +38,15 @@ Use the singular `plugin` key and a two-element `[packagePath, options]` array, 
 | `patterns`       | See [example](../examples/opencode.jsonc) | Case-insensitive regexes against error type/message                      |
 | `timeoutMs`      | `25000`                                   | API request deadline; increase if service startup/stop timeouts increase |
 | `cooldownMs`     | `30000`                                   | Plugin cooldown between attempts, including failed calls                 |
+| `reconnectMs`    | `30000`                                   | Poll /status and auto-rotate when disconnected; 0 disables               |
 
 The default patterns match `FreeUsageLimitError`, `free usage exceeded`, and the reported `rate limit exceeded. please try again later` message. An unrelated 429 does not trigger rotation. If supplied, the error HTTP status must be 402, 403 or 429. OpenCode's retry hook can also provide an error without a status.
 
 Concurrent plugin triggers share the same pending request. A matched failure at the first retry opportunity rotates once and requests a retry after one second; later attempts do not rotate again. OpenCode retains its built-in maximum retry count. API failures leave that matched failure terminal and report the reason to server stderr.
+
+## Auto-reconnection
+
+Brief internet blips can drop the SSH tunnel without a model request ever failing. When `reconnectMs` exceeds zero, the plugin polls `/status` at the `reconnectMs` interval and rotates the tunnel as soon as the server reports `disconnected`, so connectivity recovers without waiting for the next model request. Rotation shares the same cooldown and in-flight deduplication as rate-limit-triggered switches, so a reconnect never interrupts an in-progress switch. Set `reconnectMs` to `0` to disable auto-reconnection and rotate only on matched provider failures. Reconnection is logged to server stderr and reflected in the Tunnel sidebar on the next status refresh.
 
 Use **`/tunnel-status`** in OpenCode to display status as a synthetic session message, including connection ID and start time. This command uses no model request, so it remains useful when model usage is exhausted. Successful rotations also add a status message.
 

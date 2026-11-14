@@ -17,7 +17,7 @@
 [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=bugs)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
 [![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=timlaing_opencode-tunnel-switch&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=timlaing_opencode-tunnel-switch)
 
-An OpenCode v2 plugin that detects server error message, rotates an HTTP proxy via an external REST server, and retries the current model request. It discovers the server's HTTP proxy and configures proxy environment variables for the OpenCode server process. The OpenCode sidebar displays live tunnel information; `/tunnel-refresh` refreshes it immediately, and `/tunnel-status` displays the connection without a model request.
+An OpenCode v2 plugin that detects server error messages, rotates an HTTP proxy via an external REST server, and retries the current model request. It discovers the server's HTTP proxy and configures proxy environment variables for the OpenCode server process. It can also poll `/status` and auto-rotate when the tunnel reports disconnected, so brief internet blips recover without waiting for a model request. The OpenCode sidebar displays live tunnel information; `/tunnel-refresh` refreshes it immediately, and `/tunnel-status` displays the connection without a model request.
 
 ## Install and run
 

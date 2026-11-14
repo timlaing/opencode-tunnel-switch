@@ -1,6 +1,6 @@
 # @timlaing/opencode-tunnel-switch
 
-OpenCode v2 plugin that discovers the Python service's HTTP proxy, configures proxy environment variables for the OpenCode server process, and rotates an SSH SOCKS tunnel when a configured provider reports exhausted free usage. `/tunnel-status` displays the current connection ID and start time without a model request.
+OpenCode v2 plugin that discovers the Python service's HTTP proxy, configures proxy environment variables for the OpenCode server process, and rotates an SSH SOCKS tunnel when a configured provider reports exhausted free usage. It can also poll `/status` and auto-rotate when the tunnel reports disconnected, so brief internet blips recover without waiting for a model request. `/tunnel-status` displays the current connection ID and start time without a model request.
 
 The external [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch) server, available on [PyPI](https://pypi.org/project/ssh-tunnel-switch/), must be running before plugin startup. See the repository [setup guide](https://github.com/timlaing/opencode-tunnel-switch#readme).
 

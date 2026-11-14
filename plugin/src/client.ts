@@ -15,6 +15,8 @@ export const Options = z.object({
   ]),
   timeoutMs: z.number().int().positive().default(25000),
   cooldownMs: z.number().int().nonnegative().default(30000),
+  /** Poll /status and rotate when the tunnel reports disconnected; 0 disables auto-reconnection. */
+  reconnectMs: z.number().int().nonnegative().default(30000),
 }).strict();
 
 export type OptionsType = z.infer<typeof Options>;
