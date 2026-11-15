@@ -7,6 +7,13 @@ separately in [ssh-tunnel-switch](https://github.com/timlaing/ssh-tunnel-switch)
 
 - Pin the Dependabot metadata action to an immutable commit to secure automated dependency approvals and resolve the Sonar security gate.
 - Keep all dependency audit findings visible, but fail CI only for high or critical vulnerabilities.
+- Add auto-reconnection: the plugin polls `/status` at the `reconnectMs`
+  interval (default `30000`; `0` disables) and rotates the tunnel as soon
+  as the server reports `disconnected`, so brief internet blips recover without
+  waiting for a model request. Reconnection shares the rate-limit switch's
+  cooldown and in-flight deduplication and is logged to server stderr. Add the
+  `reconnectMs` option and a `watchConnection()` poller with start/stop cleanup
+  tied to plugin setup and unload.
 
 ## [1.7.0] - 2026-11-02
 

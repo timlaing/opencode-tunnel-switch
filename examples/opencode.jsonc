@@ -17,7 +17,8 @@
           "Error"
         ],
         "timeoutMs": 25000,
-        "cooldownMs": 30000
+        "cooldownMs": 30000,
+        "reconnectMs": 30000
       }
     ]
   ]

@@ -2,16 +2,18 @@ import { Plugin } from "@opencode/plugin";
 import { Options, RotationRateLimit, detector, makeClient } from "./client.js";
 import { configureProcessProxy } from "./environment.js";
 import { discoverProxy } from "./discovery.js";
+import { watchConnection } from "./reconnect.js";
 
 export default Plugin.define({
   id: "tunnel-switch",
-  /** Discover the proxy, register bounded work retries and status commands, and return environment cleanup. */
+  /** Discover the proxy, register bounded work retries and status commands, poll for disconnections, and return environment cleanup. */
   async setup(ctx) {
     const options = Options.parse(ctx.options);
     const client = makeClient(options, options.apiToken);
     const matches = detector(options);
     const rateLimitedSessions = new Set<string>();
     let restoreEnvironment = () => {};
+    let stopReconnect = () => {};
     if (options.configureProxy) {
       let status: string;
       try { status = await client.status(); }
@@ -19,6 +21,9 @@ export default Plugin.define({
         throw new Error(`Proxy discovery failed: could not query /status: ${String(error)}`);
       }
       restoreEnvironment = configureProcessProxy({ ...options, ...discoverProxy(options, status) });
+    }
+    if (options.reconnectMs > 0) {
+      stopReconnect = watchConnection(client.status, client.rotate, options).stop;
     }
     try {
       await ctx.session.hook("retry", async (event) => {
@@ -65,8 +70,9 @@ export default Plugin.define({
       });
     } catch (error) {
       restoreEnvironment();
+      stopReconnect();
       throw error;
     }
-    return restoreEnvironment;
+    return () => { restoreEnvironment(); stopReconnect(); };
   },
 });
