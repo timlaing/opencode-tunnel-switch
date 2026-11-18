@@ -1,8 +1,8 @@
 name: CI
-'on':
+"on":
   push:
     branches:
-    - main
+      - main
   pull_request: null
   workflow_dispatch: null
 permissions:
@@ -19,57 +19,57 @@ jobs:
       run:
         working-directory: plugin
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        persist-credentials: false
-        ref: ${{ github.event.pull_request.head.sha || github.sha }}
-    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-      with:
-        node-version: '26'
-        cache: npm
-        cache-dependency-path: plugin/package-lock.json
-    - run: npm ci --ignore-scripts
-    - run: npm run check
-    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      with:
-        bun-version: 1.4.3
-    - name: Verify sidebar rendering and refresh
-      run: bun --conditions=browser test/verify-tui.ts
-    - run: npm run test:coverage
-    - name: Normalize plugin LCOV paths to repository root
-      run: sed -i 's|^SF:|SF:plugin/|' coverage/lcov.info
-    - name: Record plugin coverage revision
-      run: git rev-parse HEAD > coverage/coverage-revision.txt
-    - name: Upload plugin coverage for SonarQube
-      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-      with:
-        name: plugin-coverage
-        path: |
-          plugin/coverage/lcov.info
-          plugin/coverage/coverage-revision.txt
-        if-no-files-found: error
-        retention-days: 7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.3
+      - name: Verify sidebar rendering and refresh
+        run: bun --conditions=browser test/verify-tui.ts
+      - run: npm run test:coverage
+      - name: Normalize plugin LCOV paths to repository root
+        run: sed -i 's|^SF:|SF:plugin/|' coverage/lcov.info
+      - name: Record plugin coverage revision
+        run: git rev-parse HEAD > coverage/coverage-revision.txt
+      - name: Upload plugin coverage for SonarQube
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: plugin-coverage
+          path: |
+            plugin/coverage/lcov.info
+            plugin/coverage/coverage-revision.txt
+          if-no-files-found: error
+          retention-days: 7
   validation-result:
     name: Validate ci
     needs:
-    - plugin
-    - workflow-tooling
+      - plugin
+      - workflow-tooling
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
-    - name: Require every validation job to pass
-      env:
-        RESULTS: ${{ toJSON(needs) }}
-      run: |
-        python3 -I - <<'PY'
-        import json, os
-        results = json.loads(os.environ['RESULTS'])
-        failed = [name for name, job in results.items() if job['result'] != 'success']
-        if failed:
-            raise SystemExit('Validation incomplete: ' + ', '.join(failed))
-        PY
+      - name: Require every validation job to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 -I - <<'PY'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          failed = [name for name, job in results.items() if job['result'] != 'success']
+          if failed:
+              raise SystemExit('Validation incomplete: ' + ', '.join(failed))
+          PY
   workflow-tooling:
     name: Workflow tooling coverage
     runs-on: ubuntu-latest
@@ -77,26 +77,26 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        ref: ${{ github.event.pull_request.head.sha || github.sha }}
-        persist-credentials: false
-    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-      with:
-        python-version: '3.14'
-    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-      with:
-        node-version: '26'
-    - name: Measure policy and coordinator coverage
-      run: |
-        python3 -m pip install --only-binary=:all: PyYAML==6.0.3 coverage==7.11.0
-        mkdir -p coverage-workflow
-        python3 -m coverage run --branch --source=.github/scripts -m unittest discover -s .github/scripts
-        python3 -m coverage xml -o coverage-workflow/python.xml
-        node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=coverage-workflow/javascript.lcov .github/scripts/quality-review.test.cjs
-    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-      with:
-        name: workflow-tooling-coverage
-        path: coverage-workflow/
-        if-no-files-found: error
-        retention-days: 7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "26"
+      - name: Measure policy and coordinator coverage
+        run: |
+          python3 -m pip install --only-binary=:all: PyYAML==6.0.3 coverage==7.11.0
+          mkdir -p coverage-workflow
+          python3 -m coverage run --branch --source=.github/scripts -m unittest discover -s .github/scripts
+          python3 -m coverage xml -o coverage-workflow/python.xml
+          node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=coverage-workflow/javascript.lcov .github/scripts/*.test.cjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: workflow-tooling-coverage
+          path: coverage-workflow/
+          if-no-files-found: error
+          retention-days: 7
