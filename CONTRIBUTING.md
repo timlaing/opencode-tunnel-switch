@@ -101,3 +101,7 @@ Project: `timlaing_opencode-tunnel-switch`, organization: `timlaing`, service: `
 For this public repository, create or import a public Sonar project with the key
 above, configure its CI token, and set `SONAR_ENABLED=true` to activate scanning.
 Repository visibility alone does not create or enable a Sonar project.
+
+## Required workflow validation
+
+See [.github/WORKFLOW_POLICY.md](.github/WORKFLOW_POLICY.md) for the required validation aggregates, trusted Sonar coverage handoff and current-commit review gate. Repository protection is recorded in `.github/workflow-policy.json`; introducing default-branch workflows requires a post-merge policy migration.
